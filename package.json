@@ -1,0 +1,14 @@
+{
+  "name": "battletanks",
+  "description": "Battle Tanks Game",
+  "main": "./server",
+  "dependencies": {
+    "universes": "git+https://github.com/brett19/node-universes.git"
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "http://github.com/brett19/battletanks.git"
+  },
+  "version": "0.0.1"
+}

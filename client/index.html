@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Test Client</title>
+        <meta http-equiv="X-UA-Compatible" content="IE=Edge">
+        <script src="/primus/primus.js"></script>
+        <script src="jquery-1.10.2.min.js"></script>
+        <script src="createjs-2013.12.12.min.js"></script>
+        <script src="polygon.js"></script>
+        <script src="physicsjs-full-0.5.3.min.js"></script>
+        <script src="physics_easle.js"></script>
+        <script src="physics_collisions.js"></script>
+        <script src="physics_responder.js"></script>
+        <script src="tanks.js"></script>
+    </head>
+    <body>
+        <style>
+            body {
+                margin: 0;
+                padding: 10px;
+
+                font-family: Segoe UI, sans-serif;
+                font-size: 12px;
+            }
+            h3 {
+                margin: 0 0 10px 0;
+                padding: 0;
+            }
+            .container {
+                width: 1200px;
+                margin: 0 auto;
+            }
+            section#world {
+
+            }
+
+            canvas#game {
+                background: #000000;
+            }
+
+            section#console {
+                height: 40px;
+                background: #333;
+                color: #fff;
+                padding: 5px;
+
+                overflow: auto;
+                font-size: 11px;
+                line-height: 14px;
+            }
+
+            ul#logs {
+                list-style-type: none;
+                margin: 0;
+                padding: 0;
+            }
+
+            ul#logs li {
+                display: block;
+            }
+
+            footer {
+                margin-top: 8px;
+                text-align: center;
+                clear: both;
+            }
+
+            footer img {
+                margin: 2px 5px;
+            }
+
+            #logo-universes {
+                position: relative;
+                top: -5px;
+            }
+
+            #health, #ammo {
+                background-color: black;
+                border-radius: 13px; /* (height of inner div) / 2 + padding */
+                padding: 3px;
+            }
+            #health > div, #ammo > div {
+                width: 40%; /* Adjust with JavaScript */
+                height: 20px;
+                border-radius: 10px;
+                color: #ffffff;
+                font-weight: bold;
+
+            }
+            #health > div {
+                background-color: #88322f;
+            }
+            #ammo > div {
+                background-color: #1e4e88;
+            }
+        </style>
+
+        <div class="container">
+            <section id="world">
+                <canvas width="1200" height="600" id="game"></canvas>
+            </section>
+
+            <section id="info">
+                Health: <div id="health">
+                    <div>100/100</div>
+                </div><br />
+                Ammo: <div id="ammo">
+                    <div>50/50</div>
+                </div><br />
+            </section>
+
+            <section id="console">
+                <ul id="logs"></ul>
+            </section>
+
+            <footer>
+                <img src="imgs/logos/universes.png" id="logo-universes" width="100" />
+                <img src="imgs/logos/nodejs.png" id="logo-nodejs" width="100" />
+                <img src="imgs/logos/couchbase.png" id="logo-couchbase" width="100" />
+            </footer>
+        </div>
+    </body>
+</html>
