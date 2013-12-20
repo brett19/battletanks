@@ -10,33 +10,22 @@ Physics.behavior('custom-responder', 'body-impulse-response', function(parent) {
       for (var i = 0; i < collisions.length; ++i) {
         var collision = collisions[i];
 
-        if ((collision.bodyA.name === 'tankBody' ||
-          collision.bodyB.name === 'tankBody') &&
-          (collision.bodyA.name === 'tankTurret' ||
-            collision.bodyB.name === 'tankTurret')) {
-          // Ignore Turret vs Tank collisions.
-          log('ignore turret tank');
-          continue;
+        var ignored = false;
+
+        if (collision.bodyA.collisionHandler) {
+          if (!collision.bodyA.collisionHandler()) {
+            ignored = true;
+          }
+        }
+        if (collision.bodyB.collisionHandler) {
+          if (!collision.bodyB.collisionHandler()) {
+            ignored = true;
+          }
         }
 
-        if (collision.bodyA.name === 'projectile' ||
-          collision.bodyB.name === 'projectile') {
-
-          var colPoint = Physics.vector().clone(collision.pos).vadd(collision.bodyA.state.pos);
-          triggerHit(colPoint.get(0), colPoint.get(1));
-          triggerHit(colPoint.get(0), colPoint.get(1));
-
-          if (collision.bodyA.name === 'projectile') {
-            removeProj(collision.bodyA.obj, true);
-          }
-          if (collision.bodyB.name === 'projectile') {
-            removeProj(collision.bodyB.obj, true);
-          }
-
-          continue;
+        if (!ignored) {
+          filteredCollisions.push(collision);
         }
-
-        filteredCollisions.push(collision);
       }
       data.collisions = filteredCollisions;
 

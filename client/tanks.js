@@ -1,40 +1,35 @@
-function timestamp() {
-  var curdate = new Date();
-  return curdate.getHours() + ':' + curdate.getMinutes() +
-    ':' + curdate.getSeconds();
-}
 
-function log() {
-  var entry = '<li>';
-  entry += '[' + timestamp() + '] ';
-  for (var i = 0; i < arguments.length; ++i) {
-    if (i > 0) entry += ' ';
-
-    if (arguments[i] === null) {
-      entry += 'null';
-    } else if (arguments[i] === undefined) {
-      entry += 'undefined';
-    } else if (arguments[i] instanceof Object) {
-      entry += JSON.stringify(arguments[i], null, 1);
-    } else {
-      entry += arguments[i];
-    }
-  }
-  entry += '</li>';
-  $('#logs').prepend(entry);
-}
 
 var primus = null;
 function startConn() {
+  var onMap = {};
+
   primus = Primus.connect('/', { });
-  primus.cmd = function(cmd, args) {
+
+  primus.nemit = function(cmd, args) {
     var obj = [cmd, args];
     if (packetHist) {
       var jsonObj = JSON.stringify(obj);
       packetHist.log(40 + jsonObj.length);
     }
     this.write(obj);
-  }
+  };
+
+  primus._nemit = function(cmd, args) {
+    var handlers = onMap[cmd];
+    if (handlers) {
+      for (var i = 0; i < handlers.length; ++i) {
+        handlers[i](args);
+      }
+    }
+  };
+
+  primus.non = function(cmd, handler) {
+    if (!onMap[cmd]) {
+      onMap[cmd] = [];
+    }
+    onMap[cmd].push(handler);
+  };
 
   primus.on('open', function open() {
     log('connected');
@@ -46,7 +41,7 @@ function startConn() {
       packetHist.log(40 + jsonObj.length);
     }
 
-    handleCmd(data[0], data[1]);
+    primus._nemit(data[0], data[1]);
   });
   primus.on('error', function error(err) {
     log('error : ', err);
@@ -57,171 +52,8 @@ function startConn() {
 }
 
 
-function BucketStats(interval, bucketCount) {
-  this.interval = interval;
-  this.bucketCount = bucketCount;
-  this.buckets = [];
-  this.start = Math.floor(this.curTime() / this.interval) * this.interval;
-}
-BucketStats.prototype.curTime = function() {
-  return (new Date()).getTime();
-};
-BucketStats.prototype.curBucket = function() {
-  var bucketNum = Math.floor((this.curTime() - this.start) / this.interval);
-  while (bucketNum >= this.bucketCount) {
-    var oldBucket = this.buckets.shift();
-    oldBucket.value = 0;
-    oldBucket.count = 0;
-    this.buckets.push(oldBucket);
-    this.start += this.interval;
-    bucketNum--;
-  }
-  while (bucketNum >= this.buckets.length) {
-    this.buckets.push({
-      value: 0,
-      count: 0
-    });
-  }
-  return this.buckets[bucketNum];
-};
-BucketStats.prototype.log = function(value) {
-  var bucket = this.curBucket();
-  bucket.value += value;
-  bucket.count++;
-};
 
-function BucketStatsGraph(stats, type, mode, name, x, y, w, h, tick) {
-  this.stats = stats;
 
-  this.width = w;
-  this.height = h;
-  this.type = type;
-  if (mode === 'average') {
-    this.bucketFn = function(b) {
-      return b.value / b.count;
-    }
-  } else if (mode === 'total') {
-    this.bucketFn = function(b) {
-      return b.value;
-    }
-  } else if (mode === 'count') {
-    this.bucketFn = function(b) {
-      return b.count;
-    }
-  } else {
-    throw new Error('Invalid Mode : ' + mode);
-  }
-
-  this.maxValue = 10;
-  this.tick = tick;
-  this.divLines = 4;
-
-  this.holder = new createjs.Container();
-  this.holder.x = x;
-  this.holder.y = y;
-  stage.addChild(this.holder);
-
-  this.graph = new createjs.Shape();
-  this.graph.x = 0;
-  this.graph.y = 0;
-  this.holder.addChild(this.graph);
-
-  this.title = new createjs.Text(name, "11px Verdana", "#ffffff");
-  this.title.x = this.width - 3;
-  this.title.y = this.height - 3;
-  this.title.textAlign = 'right';
-  this.title.textBaseline = 'bottom';
-  this.holder.addChild(this.title);
-
-  this.maxTxt = new createjs.Text('', "9px Verdana", "#ffffff");
-  this.maxTxt.x = 3;
-  this.maxTxt.y = 2;
-  this.maxTxt.textAlign = 'left';
-  this.maxTxt.textBaseline = 'top';
-  this.holder.addChild(this.maxTxt);
-
-  this.minTxt = new createjs.Text('', "9px Verdana", "#ffffff");
-  this.minTxt.x = 3;
-  this.minTxt.y = this.height - 3;
-  this.minTxt.textAlign = 'left';
-  this.minTxt.textBaseline = 'bottom';
-  this.holder.addChild(this.minTxt);
-}
-
-BucketStatsGraph.prototype.update = function() {
-  // Force bucket update
-  this.stats.curBucket();
-
-  // Calculate new maximums
-  for (var i = 0; i < this.stats.buckets.length; ++i) {
-    var val = this.bucketFn(this.stats.buckets[i]);
-    if (val > this.maxValue) {
-      this.maxValue = val;
-    }
-  }
-  this.maxValue = Math.ceil(this.maxValue / this.tick) * this.tick;
-
-  // Update Labels
-  this.minTxt.text = 0;
-  this.maxTxt.text = this.maxValue;
-
-  // Draw Graph
-  var gfx = this.graph.graphics;
-  var valMag = 1 / this.maxValue * this.height;
-
-  gfx.clear();
-  gfx.beginStroke('rgba(0,0,255,0.8)');
-  gfx.beginFill('rgba(0,0,255,0.1');
-  gfx.drawRect(0, 0, this.width, this.height);
-  gfx.endFill();
-  gfx.endStroke();
-
-  gfx.beginStroke('rgba(0,0,255,0.4)');
-  for (var i = 1; i < this.divLines; ++i) {
-    gfx.moveTo(0, this.height/this.divLines*i);
-    gfx.lineTo(this.width, this.height/this.divLines*i);
-  }
-  gfx.endStroke();
-
-  if (this.type === 'bar') {
-    var barWidth = this.width / (this.stats.bucketCount - 1);
-
-    gfx.beginStroke('rgba(0,0,255,0.6)');
-    gfx.beginFill('rgba(0,0,255,0.4)');
-    gfx.moveTo(this.width, this.height);
-    for (var i = 1; i < this.stats.buckets.length; ++i) {
-      var bucketIdx = this.stats.buckets.length - 1 - i;
-      var barIdx = this.stats.bucketCount - 1 - i;
-      var bucket = this.stats.buckets[bucketIdx];
-      var val = this.bucketFn(bucket);
-
-      gfx.lineTo((barIdx+1) * barWidth, this.height - (val * valMag));
-      gfx.lineTo((barIdx+0) * barWidth, this.height - (val * valMag));
-      gfx.lineTo((barIdx+0) * barWidth, this.height);
-    }
-    gfx.lineTo(0, this.height);
-    gfx.lineTo(this.width, this.height);
-    gfx.endFill();
-    gfx.endStroke();
-  } else {
-    var gapWidth = this.width / (this.stats.bucketCount-2);
-
-    gfx.beginStroke('rgba(0,0,255,0.9)');
-    for (var i = 1; i < this.stats.buckets.length; ++i) {
-      var bucketIdx = this.stats.buckets.length - 1 - i;
-      var barIdx = this.stats.bucketCount - 1 - i;
-      var bucket = this.stats.buckets[bucketIdx];
-      var val = this.bucketFn(bucket);
-
-      if (i === 0) {
-        gfx.moveTo(this.width, this.height - (val * valMag));
-      } else {
-        gfx.lineTo(barIdx * gapWidth, this.height - (val * valMag));
-      }
-    }
-    gfx.endStroke();
-  }
-};
 
 
 var stage = null;
@@ -244,27 +76,9 @@ var mProjs = [];
 var maxHealth = 100;
 var maxAmmo = 30;
 
-var startInfo = window.location.hash.split('#');
-var myChar = {
-  name: startInfo[1],
-  color: '#' + startInfo[2],
-  x: parseInt(Math.random() * 400 + 30),
-  y: parseInt(Math.random() * 400 + 30),
-  angle: 0,
-  tangle: 0,
-  health: 100,
-  ammo: 30
-};
-
 
 createjs.Sound.registerSound("tank-firing.mp3", "tankFiring");
 createjs.Sound.registerSound("explosion.mp3", "explosion");
-
-
-
-function GameWorld() {
-  this.physWorld = null;
-}
 
 
 
@@ -283,6 +97,10 @@ function Tank(world, opts, VisClass) {
   this.drX = 0;
   this.drY = 0;
   this.drAngle = 0;
+
+  // Other Props
+  this.health = 0;
+  this.ammo = 0;
 
   var physBody = Physics.body('tankBody', {
     x: opts.x,
@@ -319,13 +137,13 @@ Tank.prototype.remove = function() {
   if (this.view) {
     this.view.remove();
   }
-}
+};
 
 Tank.prototype.update = function(dt) {
   var bodyState = this.physBody.state;
 
   // Apply Dead Reckoning
-  var drm = 0.2;
+  var drm = 0.3;
   if (Math.abs(this.drX) >= 0.1 || Math.abs(this.drY) >= 0.1) {
     bodyState.pos.add(this.drX*drm, this.drY*drm);
     bodyState.old.pos.add(this.drX*drm, this.drY*drm);
@@ -409,7 +227,7 @@ Tank.prototype.getTurnVel = function() {
 };
 Tank.prototype.setTurnVel = function(val) {
   this.turnVel = val;
-}
+};
 
 Tank.prototype.getMoveVel = function() {
   return this.moveVel;
@@ -420,7 +238,7 @@ Tank.prototype.setMoveVel = function(val) {
 
 Tank.prototype.getTAngleTarget = function() {
   return this.tangleTarget;
-}
+};
 Tank.prototype.setTAngleTarget = function(val) {
   this.tangleTarget = val;
 };
@@ -467,6 +285,7 @@ Tank.prototype.getFireInfo = function() {
 
 function TankVis(obj, opts) {
   this.obj = obj;
+  this.name = opts.name;
 
   this.holder = new createjs.Container();
   lyrChars.addChild(this.holder);
@@ -526,93 +345,185 @@ TankVis.prototype.update = function() {
 
 
 
+function Projectile(world, opts, VisClass) {
+  this.physWorld = world;
+  this.view = null;
+  this.fireTime = (new Date()).getTime();
+  this.speed = 0.3;
 
-function createProj(obj) {
-  var proj = new createjs.Bitmap('attack.png');
-  proj.regX = 8;
-  proj.regY = 2;
-
-  lyrProjs.addChild(proj);
-  obj.proj = proj;
-
-  var phys = Physics.body('projectile', {
-    x: obj.originX,
-    y: obj.originY,
-    angle: obj.angle * (180/Math.PI),
+  this.physBall = Physics.body('projectile', {
+    x: opts.x,
+    y: opts.y,
+    angle: opts.angle,
     radius: 4
   });
-  phys.state.vel = Physics.vector(
-    Math.cos(obj.angle) * 0.3,
-    Math.sin(obj.angle) * 0.3
+
+  var angleRad = opts.angle / (180/Math.PI);
+  this.physBall.state.vel = Physics.vector(
+    Math.cos(angleRad) * this.speed,
+    Math.sin(angleRad) * this.speed
   );
-  phys.obj = obj;
-  obj.phys = phys;
-  world.add(phys);
 
-  obj.stime = (new Date()).getTime();
-
-  updateProj(obj);
-
-  createSound('tankFiring', obj.originX, obj.originY);
-}
-
-function updateProj(proj) {
-  var projX = proj.phys.state.pos.get(0);
-  var projY = proj.phys.state.pos.get(1);
-
-  proj.proj.x = projX;
-  proj.proj.y = projY;
-  proj.proj.rotation = proj.phys.state.angular.pos;
-
-  var curtime = (new Date()).getTime();
-  if (curtime - proj.stime > 1500) {
-    triggerHit(proj.proj.x, proj.proj.y);
+  var self = this;
+  this.physBall.collisionHandler = function() {
+    boomProjectile(self);
     return false;
+  };
+
+  this.physWorld.add(this.physBall);
+
+  if (VisClass) {
+    this.view = new VisClass(this, opts);
   }
 
-  var clearDist = -40;
-  if (projX < -clearDist || projY < -clearDist || projX >= 3000+clearDist || projY >= 3000+clearDist) {
-    return false
-  }
-  return true;
+  this.update(0);
 }
 
-function removeProj(obj, remove) {
-  lyrProjs.removeChild(obj.proj);
-  world.remove(obj.phys);
+Projectile.prototype.remove = function() {
+  this.physWorld.remove(this.physBall);
 
-  if (remove) {
-    var projIdx = mProjs.indexOf(obj);
+  if (this.view) {
+    this.view.remove();
+  }
+};
+
+Projectile.prototype.update = function(dt) {
+  // TODO: THIS IS NOT SAFE
+  //         boomProjectile calls removeProjectile which modifies mProjs which
+  //         is looped in order to call this update function itself.
+  var curTime = (new Date()).getTime();
+  if (curTime - this.fireTime >= 2000) {
+    boomProjectile(this);
+  }
+
+  if (this.view) {
+    this.view.update();
+  }
+};
+
+Projectile.prototype.getPosition = function() {
+  var ballState = this.physBall.state;
+  return { x: ballState.pos.get(0), y: ballState.pos.get(1) };
+};
+
+Projectile.prototype.getAngle = function() {
+  var ballState = this.physBall.state;
+  return ballState.angular.pos;
+};
+
+
+
+function ProjectileVis(obj, opts) {
+  this.obj = obj;
+
+  this.img = new createjs.Bitmap('attack.png');
+  this.img.regX = 8;
+  this.img.regY = 2;
+  lyrProjs.addChild(this.img);
+}
+
+ProjectileVis.prototype.remove = function() {
+  lyrProjs.removeChild(this.img);
+};
+
+ProjectileVis.prototype.update = function() {
+  var objPosition = this.obj.getPosition();
+  this.img.x = objPosition.x;
+  this.img.y = objPosition.y;
+  this.img.rotation = this.obj.getAngle();
+};
+
+
+
+
+
+function addProjectile(opts) {
+  var proj = new Projectile(world, opts, ProjectileVis);
+  mProjs.push(proj);
+  createSound('tankFiring', opts.x, opts.y);
+  return proj;
+}
+
+function boomProjectile(proj) {
+  var projPosition = proj.getPosition();
+
+  triggerHit(projPosition.x, projPosition.y);
+
+  removeProjectile(proj);
+}
+
+function removeProjectile(proj) {
+  proj.remove();
+
+  var projIdx = mProjs.indexOf(proj);
+  if (projIdx >= 0) {
     mProjs.splice(projIdx, 1);
   }
 }
 
-function fireToward() {
+
+
+function fireProjectile() {
   if (myChar.ammo <= 0) {
     return;
   }
-
-  var fireInfo = myChar.tobj.getFireInfo();
-
-  var obj = {};
-  obj.originX = fireInfo.x;
-  obj.originY = fireInfo.y;
-  obj.angle = fireInfo.angle / (180/Math.PI);
-
-  createProj(obj);
-  mProjs.push(obj);
-
-  primus.cmd('fire', {
-    originX: obj.originX,
-    originY: obj.originY,
-    angle: obj.angle
-  });
-
   myChar.ammo--;
+
+  var fireInfo = myChar.getFireInfo();
+  addProjectile(fireInfo);
+
+  primus.nemit('fire', {
+    x: fireInfo.x,
+    y: fireInfo.y,
+    angle: fireInfo.angle
+  });
 }
 
 function start() {
-  primus.cmd('join', {
+  primus.non('addplayer', function(args) {
+    var tank = new Tank(world, args, TankVis);
+    oPlayers.push(tank);
+  });
+
+  primus.non('delplayer', function(args) {
+    for (var i = 0; i < oPlayers.length; ++i) {
+      if (oPlayers[i].uuid === args.uuid) {
+        var obj = oPlayers.splice(i, 1);
+        obj[0].remove();
+        break;
+      }
+    }
+  });
+
+  primus.non('move', function(args) {
+    for (var i = 0; i < oPlayers.length; ++i) {
+      if (oPlayers[i].uuid == args.uuid) {
+        var obj = oPlayers[i];
+
+        if (args.pos !== undefined) {
+          obj.setDRPosition(args.pos.x, args.pos.y);
+        }
+        if (args.moveVel !== undefined) {
+          obj.setMoveVel(args.moveVel);
+        }
+        if (args.angle !== undefined) {
+          obj.setDRAngle(args.angle);
+        }
+        if (args.turnVel !== undefined) {
+          obj.setTurnVel(args.turnVel);
+        }
+        if (args.tangle !== undefined) {
+          obj.setTAngleTarget(args.tangle);
+        }
+      }
+    }
+  });
+
+  primus.non('fire', function(args) {
+    addProjectile(args);
+  });
+
+  primus.nemit('join', {
     name: myChar.name,
     x: myChar.x,
     y: myChar.y,
@@ -623,12 +534,9 @@ function start() {
 }
 
 var lastUpdate = {
-  x: 0,
-  y: 0,
-
+  pos: {x: 0, y: 0},
   moveVel: 0,
   turnVel: 0,
-
   angle: 0,
   tangle: 0
 };
@@ -643,88 +551,43 @@ function netUpdate() {
   var newUpdate = {};
   var sendUpd = false;
 
-  var myPos = myChar.tobj.getPosition();
-  if (Math.abs(lastUpdate.x-myPos.x) >= 0.5 || Math.abs(lastUpdate.y-myPos.y) >= 0.5) {
-    newUpdate.x = myPos.x;
-    newUpdate.y = myPos.y;
-    lastUpdate.x = myPos.x;
-    lastUpdate.y = myPos.y;
+  var myPos = myChar.getPosition();
+  if (Math.abs(lastUpdate.pos.x-myPos.x) >= 0.5 || Math.abs(lastUpdate.pos.y-myPos.y) >= 0.5) {
+    newUpdate.pos = myPos;
+    lastUpdate.pos = newUpdate.pos;
     sendUpd = true;
   }
 
-  var myMoveVel = myChar.tobj.getMoveVel();
+  var myMoveVel = myChar.getMoveVel();
   if (Math.abs(lastUpdate.moveVel-myMoveVel) >= 0.1) {
     newUpdate.moveVel = myMoveVel;
-    lastUpdate.moveVel = myMoveVel;
+    lastUpdate.moveVel = newUpdate.moveVel;
     sendUpd = true;
   }
 
-  var myAngle = myChar.tobj.getAngle();
+  var myAngle = myChar.getAngle();
   if (Math.abs(lastUpdate.angle-myAngle) >= 0.1) {
     newUpdate.angle = myAngle;
-    lastUpdate.angle = myAngle;
+    lastUpdate.angle = newUpdate.angle;
     sendUpd = true;
   }
 
-  var myTurnVel = myChar.tobj.getTurnVel();
+  var myTurnVel = myChar.getTurnVel();
   if (Math.abs(lastUpdate.turnVel-myTurnVel) >= 0.1) {
     newUpdate.turnVel = myTurnVel;
-    lastUpdate.turnVel = myTurnVel;
+    lastUpdate.turnVel = newUpdate.turnVel;
     sendUpd = true;
   }
 
-  var myTAngle = myChar.tobj.getTAngleTarget();
-  if (Math.abs(lastUpdate.tangle-myTAngle) >= 0.01) {
+  var myTAngle = myChar.getTAngleTarget();
+  if (Math.abs(lastUpdate.tangle-myTAngle) >= 0.1) {
     newUpdate.tangle = myTAngle;
-    lastUpdate.tangle = myTAngle;
+    lastUpdate.tangle = newUpdate.tangle;
     sendUpd = true;
   }
 
   if (sendUpd) {
-    primus.cmd('move', newUpdate);
-  }
-}
-
-function handleCmd(cmd, data) {
-  if (cmd === 'addplayer') {
-
-    data.tobj = new Tank(world, data, TankVis);
-    oPlayers.push(data);
-
-  } else if (cmd === 'delplayer') {
-    for (var i = 0; i < oPlayers.length; ++i) {
-      if (oPlayers[i].uuid === data.uuid) {
-        var obj = oPlayers.splice(i, 1);
-        obj[0].tobj.remove();
-        break;
-      }
-    }
-  } else if (cmd === 'move') {
-    for (var i = 0; i < oPlayers.length; ++i) {
-      if (oPlayers[i].uuid == data.uuid) {
-        var obj = oPlayers[i].tobj;
-
-        if (data.x !== undefined && data.y !== undefined) {
-          obj.setDRPosition(data.x, data.y);
-        }
-        if (data.moveVel !== undefined) {
-          obj.setMoveVel(data.moveVel);
-        }
-        if (data.angle !== undefined) {
-          obj.setDRAngle(data.angle);
-        }
-        if (data.turnVel !== undefined) {
-          obj.setTurnVel(data.turnVel);
-        }
-        if (data.tangle !== undefined) {
-          obj.setTAngleTarget(data.tangle);
-        }
-      }
-    }
-  } else if (cmd === 'fire') {
-    log('data : ', data);
-    createProj(data);
-    mProjs.push(data);
+    primus.nemit('move', newUpdate);
   }
 }
 
@@ -744,27 +607,27 @@ var KEY_RIGHT = 39
 
 function tickInput(dt) {
   if (myKeys[KEY_LEFT] && !myKeys[KEY_RIGHT]) {
-    myChar.tobj.setTurnDir(-1);//turnMag);
+    myChar.setTurnDir(-1);//turnMag);
   } else if (myKeys[KEY_RIGHT] && !myKeys[KEY_LEFT]) {
-    myChar.tobj.setTurnDir(+1);//turnMag);
+    myChar.setTurnDir(+1);//turnMag);
   } else {
-    myChar.tobj.setTurnDir(0);
+    myChar.setTurnDir(0);
   }
 
   if (myKeys[KEY_UP]) {
-    myChar.tobj.setMoveDir(+1);
+    myChar.setMoveDir(+1);
   } else if (myKeys[KEY_DOWN]) {
-    myChar.tobj.setMoveDir(-1);
+    myChar.setMoveDir(-1);
   } else {
-    myChar.tobj.setMoveDir(0);
+    myChar.setMoveDir(0);
   }
 
   var localMouse = grpGame.globalToLocal(myMouse.x, myMouse.y);
-  var charPos = myChar.tobj.getPosition();
-  var charAngle = myChar.tobj.getAngle();
+  var charPos = myChar.getPosition();
+  var charAngle = myChar.getAngle();
 
   var mouseAngle = Math.atan2(localMouse.y-charPos.y, localMouse.x-charPos.x) * (180/Math.PI);
-  myChar.tobj.setTAngleTarget(mouseAngle - charAngle);
+  myChar.setTAngleTarget(mouseAngle - charAngle);
 }
 
 var data = {
@@ -781,7 +644,7 @@ function checkDamage(x, y, info) {
   var startRange = 20;
   var endRange = 55;
 
-  var infoPos = info.tobj.getPosition();
+  var infoPos = info.getPosition();
 
   var dX = Math.abs(x - infoPos.x);
   var dY = Math.abs(y - infoPos.y);
@@ -823,7 +686,7 @@ setTimeout(function() {
   }
 }, 500);
 function updateSound(sound) {
-  var playerPos = myChar.tobj.getPosition();
+  var playerPos = myChar.getPosition();
   var dX = playerPos.x - sound.x;
   var dY = playerPos.y - sound.y;
   var dist = Math.sqrt(dX*dX+dY*dY);
@@ -855,49 +718,19 @@ function triggerHit(x, y) {
   createSound('explosion', x, y);
 }
 
-function checkProj(proj) {
-  return false;
-}
-
-function tickProjs() {
-  var newMProjs = [];
-  for (var i = 0; i < mProjs.length; ++i) {
-    if (!updateProj(mProjs[i])) {
-      removeProj(mProjs[i]);
-    } else {
-      newMProjs.push(mProjs[i]);
-    }
+function tickChars(dt) {
+  myChar.update(dt);
+  for (var i = 0; i < oPlayers.length; ++i) {
+    oPlayers[i].update(dt);
   }
-  mProjs = newMProjs;
 }
 
-var fenceB = null;
-
-function addFence(x, y) {
-  //234 363 38
-
-
-  var fence = new createjs.Bitmap('tree.png');
-  fence.x = 500;
-  fence.y = 200;
-  lyrMapT.addChild(fence);
-
-  var square = Physics.body('circle', {
-    // place the center of the square at (0, 0)
-    x: 562,
-    y: 250,
-    radius: 26,
-    fixed: true
-  });
-  world.add(square);
+function tickProjs(dt) {
+  for (var i = 0; i < mProjs.length; ++i) {
+    mProjs[i].update(dt);
+  }
 }
 
-function normVal(val) {
-  var mult = 1 / (Math.abs(val.x) + Math.abs(val.y));
-  return {x: val.x*mult, y: val.y*mult};
-}
-
-var myRender = null;
 function setupWorld() {
   world = Physics({
     timestep: 1000 / 200
@@ -927,7 +760,7 @@ function setupWorld() {
     };
   });
 
-  //world.add( Physics.renderer('easlejs', {stage:stage}) );
+  world.add( Physics.renderer('easlejs', {stage:grpGame}) );
   world.add( Physics.behavior('custom-collisions') );
   world.add( Physics.behavior('sweep-prune') );
   world.add( Physics.behavior('custom-responder') );
@@ -996,7 +829,7 @@ var viewportH = 600;
 var viewBorder = 40;
 
 function adjustViewport() {
-  var tankPos = myChar.tobj.getPosition();
+  var tankPos = myChar.getPosition();
   var tankV = grpGame.localToGlobal(tankPos.x, tankPos.y);
 
   var scrollX = viewportW / 3;
@@ -1029,6 +862,7 @@ function adjustViewport() {
   }
 }
 
+var myChar = null;
 var netbpsGraph = null;
 var netppsGraph = null;
 var fpsGraph = null;
@@ -1040,12 +874,8 @@ function tick(e) {
 
   world.step(e.time);
 
-  myChar.tobj.update(e.delta);
-  for (var i = 0; i < oPlayers.length; ++i) {
-    oPlayers[i].tobj.update(e.delta);
-  }
-
-  tickProjs();
+  tickChars(e.delta);
+  tickProjs(e.delta);
 
   netbpsGraph.update();
   netppsGraph.update();
@@ -1115,7 +945,7 @@ function setup() {
     var offset = $('#game').offset();
     var fireX = e.pageX - offset.left;
     var fireY = e.pageY - offset.top;
-    fireToward(fireX, fireY);
+    fireProjectile(fireX, fireY);
     e.preventDefault();
   });
 
@@ -1136,28 +966,33 @@ function setup() {
 
   var graphX = viewportW - 10 - 300;
   var graphY = viewportH + 10 - (60+10)*3;
-  netbpsGraph = new BucketStatsGraph(packetHist, 'line', 'total',
+  netbpsGraph = new BucketStatsGraph(stage, packetHist, 'line', 'total',
       'Network I/O (bytes/sec)', graphX, graphY+(60+4)*0, 300, 60, 250);
-  netppsGraph = new BucketStatsGraph(packetHist, 'bar', 'count',
+  netppsGraph = new BucketStatsGraph(stage, packetHist, 'bar', 'count',
       'Network I/O (packets/sec)', graphX, graphY+(60+4)*1, 300, 60, 5);
-  fpsGraph = new BucketStatsGraph(fpsHist, 'line', 'total',
+  fpsGraph = new BucketStatsGraph(stage, fpsHist, 'line', 'total',
     'FPS', graphX, graphY+(60+4)*2, 300, 60, 20);
 
   var mapT = new createjs.Bitmap('mapTop.png');
-  mapT.x = 0;
-  mapT.y = 0;
   lyrMapT.addChild(mapT);
 
   var mapB = new createjs.Bitmap('mapBottom.png');
-  mapB.x = 0;
-  mapB.y = 0;
   lyrMapB.addChild(mapB);
 
   setupWorld();
 
-  myChar.tobj = new Tank(world, myChar, TankVis);
+  var userName = window.location.hash.substr(1);
+  var myCharOpts = {
+    name: userName,
+    x: parseInt(Math.random() * 400 + 100),
+    y: parseInt(Math.random() * 400 + 100),
+    angle: 0,
+    tangle: 0
+  };
 
-  addFence(200, 200);
+  myChar = new Tank(world, myCharOpts, TankVis);
+  myChar.health = 100;
+  myChar.ammo = 30;
 
   createjs.Ticker.addEventListener("tick", tick);
   createjs.Ticker.setFPS(30);
