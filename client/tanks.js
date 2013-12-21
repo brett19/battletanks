@@ -1,61 +1,3 @@
-
-
-var primus = null;
-function startConn() {
-  var onMap = {};
-
-  primus = Primus.connect('/', { });
-
-  primus.nemit = function(cmd, args) {
-    var obj = [cmd, args];
-    if (packetHist) {
-      var jsonObj = JSON.stringify(obj);
-      packetHist.log(40 + jsonObj.length);
-    }
-    this.write(obj);
-  };
-
-  primus._nemit = function(cmd, args) {
-    var handlers = onMap[cmd];
-    if (handlers) {
-      for (var i = 0; i < handlers.length; ++i) {
-        handlers[i](args);
-      }
-    }
-  };
-
-  primus.non = function(cmd, handler) {
-    if (!onMap[cmd]) {
-      onMap[cmd] = [];
-    }
-    onMap[cmd].push(handler);
-  };
-
-  primus.on('open', function open() {
-    log('connected');
-    start();
-  });
-  primus.on('data', function(data) {
-    if (packetHist) {
-      var jsonObj = JSON.stringify(data);
-      packetHist.log(40 + jsonObj.length);
-    }
-
-    primus._nemit(data[0], data[1]);
-  });
-  primus.on('error', function error(err) {
-    log('error : ', err);
-  });
-  primus.on('end', function error() {
-    log('disconnected');
-  });
-}
-
-
-
-
-
-
 var stage = null;
 var world = null;
 
@@ -65,6 +7,7 @@ var lyrMapB = null;
 var lyrChars = null;
 var lyrProjs = null;
 var lyrNames = null;
+var lyrDebug = null;
 
 var packetHist = new BucketStats(1000, 60);
 var fpsHist = new BucketStats(1000, 60);
@@ -79,206 +22,6 @@ var maxAmmo = 30;
 
 createjs.Sound.registerSound("tank-firing.mp3", "tankFiring");
 createjs.Sound.registerSound("explosion.mp3", "explosion");
-
-
-
-var turnMag = 0.2;
-var speedMag = 0.2 * 2;
-var tspeedClamp = 180;
-
-function Tank(world, opts, VisClass) {
-  this.physWorld = world;
-  this.view = null;
-  this.moveVel = 0;
-  this.turnVel = 0;
-  this.tangle = 0;
-  this.tangleTarget = 0;
-
-  this.drX = 0;
-  this.drY = 0;
-  this.drAngle = 0;
-
-  // Other Props
-  this.health = 0;
-  this.ammo = 0;
-
-  var physBody = Physics.body('tankBody', {
-    x: opts.x,
-    y: opts.y,
-    radius: 24,
-    restitution: 0
-  });
-  this.physWorld.add(physBody);
-  this.physBody = physBody;
-
-  var physTurret = Physics.body('tankTurret', {
-    fixed: true,
-    vertices: [
-      {x: 0, y: 0},
-      {x: 42, y: 0},
-      {x: 42, y: 8},
-      {x: 0, y: 8}
-    ]
-  });
-  this.physWorld.add(physTurret);
-  this.physTurret = physTurret;
-
-  if (VisClass) {
-    this.view = new VisClass(this, opts);
-  }
-
-  this.update(0);
-}
-
-Tank.prototype.remove = function() {
-  this.physWorld.remove(this.physTurret);
-  this.physWorld.remove(this.physBody);
-
-  if (this.view) {
-    this.view.remove();
-  }
-};
-
-Tank.prototype.update = function(dt) {
-  var bodyState = this.physBody.state;
-
-  // Apply Dead Reckoning
-  var drm = 0.3;
-  if (Math.abs(this.drX) >= 0.1 || Math.abs(this.drY) >= 0.1) {
-    bodyState.pos.add(this.drX*drm, this.drY*drm);
-    bodyState.old.pos.add(this.drX*drm, this.drY*drm);
-    this.drX -= this.drX * drm;
-    this.drY -= this.drY * drm;
-  }
-  if (Math.abs(this.drAngle) >= 0.1) {
-    bodyState.angular.pos += this.drAngle * drm;
-    bodyState.old.angular.pos += this.drAngle * drm;
-    this.drAngle -= this.drAngle * drm;
-  }
-
-  if (dt > 0) {
-    // Apply TAngle Velocity
-    var scaledTSpeedClamp = tspeedClamp * (dt/1000);
-    var tangleDelta = this.tangleTarget - this.tangle;
-    while (tangleDelta >= 180) {
-      tangleDelta -= 360;
-    }
-    while (tangleDelta < -180) {
-      tangleDelta += 360;
-    }
-    if (tangleDelta < -scaledTSpeedClamp) {
-      this.tangle -= scaledTSpeedClamp;
-    } else if (tangleDelta > scaledTSpeedClamp) {
-      this.tangle += scaledTSpeedClamp;
-    } else {
-      this.tangle += tangleDelta;
-    }
-  }
-
-  if (this.turnVel) {
-    bodyState.angular.vel = this.turnVel;
-  } else {
-    bodyState.angular.vel = 0;
-  }
-
-  if (this.moveVel) {
-    var angleRad = bodyState.angular.pos * (Math.PI/180);
-    bodyState.vel.set(
-      Math.cos(angleRad)*this.moveVel,
-      Math.sin(angleRad)*this.moveVel);
-  } else {
-    bodyState.vel.set(0, 0);
-  }
-
-  var bodyAngleRad = bodyState.angular.pos / (180/Math.PI);
-  var turretAngleRad = bodyAngleRad + (this.tangle / (180/Math.PI));
-
-  var tX = bodyState.pos.get(0);
-  var tY = bodyState.pos.get(1);
-  tX += Math.cos(bodyAngleRad) * 11;
-  tY += Math.sin(bodyAngleRad) * 11;
-  tX += Math.cos(turretAngleRad) * 26;
-  tY += Math.sin(turretAngleRad) * 26;
-
-  this.physTurret.state.pos.set(tX, tY);
-  this.physTurret.state.angular.pos = bodyState.angular.pos + this.tangle;
-
-  if (this.view) {
-    this.view.update();
-  }
-};
-
-Tank.prototype.getPosition = function() {
-  var bodyState = this.physBody.state;
-  return { x:bodyState.pos.get(0), y: bodyState.pos.get(1) };
-};
-
-Tank.prototype.getAngle = function() {
-  var bodyState = this.physBody.state;
-  return bodyState.angular.pos;
-};
-
-Tank.prototype.getTAngle = function() {
-  return this.tangle;
-};
-
-Tank.prototype.getTurnVel = function() {
-  return this.turnVel;
-};
-Tank.prototype.setTurnVel = function(val) {
-  this.turnVel = val;
-};
-
-Tank.prototype.getMoveVel = function() {
-  return this.moveVel;
-};
-Tank.prototype.setMoveVel = function(val) {
-  this.moveVel = val;
-};
-
-Tank.prototype.getTAngleTarget = function() {
-  return this.tangleTarget;
-};
-Tank.prototype.setTAngleTarget = function(val) {
-  this.tangleTarget = val;
-};
-
-Tank.prototype.setTurnDir = function(val) {
-  this.turnVel = val * turnMag;
-};
-Tank.prototype.setMoveDir = function(val) {
-  this.moveVel = val * speedMag;
-};
-
-Tank.prototype.setDRPosition = function(x, y) {
-  var bodyState = this.physBody.state;
-  this.drX = x - bodyState.pos.get(0);
-  this.drY = y - bodyState.pos.get(1);
-};
-
-Tank.prototype.setDRAngle = function(val) {
-  var bodyState = this.physBody.state;
-  this.drAngle = val - bodyState.angular.pos;
-};
-
-Tank.prototype.getFireInfo = function() {
-  var bodyState = this.physBody.state;
-  var bodyAngleRad = bodyState.angular.pos / (180/Math.PI);
-  var turretAngleRad = bodyAngleRad + (this.tangle / (180/Math.PI));
-
-  var tX = bodyState.pos.get(0);
-  var tY = bodyState.pos.get(1);
-  tX += Math.cos(bodyAngleRad) * 11;
-  tY += Math.sin(bodyAngleRad) * 11;
-  tX += Math.cos(turretAngleRad) * 52;
-  tY += Math.sin(turretAngleRad) * 52;
-
-  return {
-    x: tX,
-    y: tY,
-    angle: bodyState.angular.pos + this.tangle
-  };
-};
 
 
 
@@ -314,14 +57,8 @@ function TankVis(obj, opts) {
   var bar = new createjs.Shape();
   bar.x = 0;
   bar.y = -42;
-  var barGfx = bar.graphics;
-  barGfx.beginFill('rgba(255,100,100,1)');
-  barGfx.drawRect(-25, 0, 50, 7);
-  barGfx.endFill();
-  barGfx.beginStroke("rgba(255,0,0,1)");
-  barGfx.drawRect(-25, 0, 50, 7);
-  barGfx.endStroke();
   this.namePlate.addChild(bar);
+  this.healthBar = bar;
 
   this.update();
 }
@@ -340,77 +77,17 @@ TankVis.prototype.update = function() {
 
   this.namePlate.x = objPosition.x;
   this.namePlate.y = objPosition.y;
+
+  var barGfx = this.healthBar.graphics;
+  var healthWidth = this.obj.getHealth() / 100 * 50;
+  barGfx.clear();
+  barGfx.beginFill('rgba(255,100,100,1)');
+  barGfx.drawRect(-25, 0, healthWidth, 7);
+  barGfx.endFill();
+  barGfx.beginStroke("rgba(255,0,0,1)");
+  barGfx.drawRect(-25, 0, 50, 7);
+  barGfx.endStroke();
 };
-
-
-
-
-function Projectile(world, opts, VisClass) {
-  this.physWorld = world;
-  this.view = null;
-  this.fireTime = (new Date()).getTime();
-  this.speed = 0.3;
-
-  this.physBall = Physics.body('projectile', {
-    x: opts.x,
-    y: opts.y,
-    angle: opts.angle,
-    radius: 4
-  });
-
-  var angleRad = opts.angle / (180/Math.PI);
-  this.physBall.state.vel = Physics.vector(
-    Math.cos(angleRad) * this.speed,
-    Math.sin(angleRad) * this.speed
-  );
-
-  var self = this;
-  this.physBall.collisionHandler = function() {
-    boomProjectile(self);
-    return false;
-  };
-
-  this.physWorld.add(this.physBall);
-
-  if (VisClass) {
-    this.view = new VisClass(this, opts);
-  }
-
-  this.update(0);
-}
-
-Projectile.prototype.remove = function() {
-  this.physWorld.remove(this.physBall);
-
-  if (this.view) {
-    this.view.remove();
-  }
-};
-
-Projectile.prototype.update = function(dt) {
-  // TODO: THIS IS NOT SAFE
-  //         boomProjectile calls removeProjectile which modifies mProjs which
-  //         is looped in order to call this update function itself.
-  var curTime = (new Date()).getTime();
-  if (curTime - this.fireTime >= 2000) {
-    boomProjectile(this);
-  }
-
-  if (this.view) {
-    this.view.update();
-  }
-};
-
-Projectile.prototype.getPosition = function() {
-  var ballState = this.physBall.state;
-  return { x: ballState.pos.get(0), y: ballState.pos.get(1) };
-};
-
-Projectile.prototype.getAngle = function() {
-  var ballState = this.physBall.state;
-  return ballState.angular.pos;
-};
-
 
 
 function ProjectileVis(obj, opts) {
@@ -437,10 +114,18 @@ ProjectileVis.prototype.update = function() {
 
 
 
+
+
 function addProjectile(opts) {
   var proj = new Projectile(world, opts, ProjectileVis);
   mProjs.push(proj);
-  createSound('tankFiring', opts.x, opts.y);
+
+  soundMgr.play({
+    name: 'tankFiring',
+    x: opts.x,
+    y: opts.y
+  })
+
   return proj;
 }
 
@@ -480,6 +165,12 @@ function fireProjectile() {
 }
 
 function start() {
+  setup();
+
+  primus.non('phys/debugDraw', function(args) {
+    netDrawer.draw(args);
+  });
+
   primus.non('addplayer', function(args) {
     var tank = new Tank(world, args, TankVis);
     oPlayers.push(tank);
@@ -490,6 +181,16 @@ function start() {
       if (oPlayers[i].uuid === args.uuid) {
         var obj = oPlayers.splice(i, 1);
         obj[0].remove();
+        break;
+      }
+    }
+  });
+
+  primus.non('health', function(args) {
+    for (var i = 0; i < oPlayers.length; ++i) {
+      if (oPlayers[i].uuid == args.uuid) {
+        var obj = oPlayers[i];
+        obj.setHealth(args.health);
         break;
       }
     }
@@ -515,6 +216,7 @@ function start() {
         if (args.tangle !== undefined) {
           obj.setTAngleTarget(args.tangle);
         }
+        break;
       }
     }
   });
@@ -523,10 +225,11 @@ function start() {
     addProjectile(args);
   });
 
+  var myPosition = myChar.getPosition();
   primus.nemit('join', {
     name: myChar.name,
-    x: myChar.x,
-    y: myChar.y,
+    x: myPosition.x,
+    y: myPosition.y,
     color: myChar.color
   });
 
@@ -552,35 +255,35 @@ function netUpdate() {
   var sendUpd = false;
 
   var myPos = myChar.getPosition();
-  if (Math.abs(lastUpdate.pos.x-myPos.x) >= 0.5 || Math.abs(lastUpdate.pos.y-myPos.y) >= 0.5) {
+  if (true) {// if (Math.abs(lastUpdate.pos.x-myPos.x) >= 0.1 || Math.abs(lastUpdate.pos.y-myPos.y) >= 0.1) {
     newUpdate.pos = myPos;
     lastUpdate.pos = newUpdate.pos;
     sendUpd = true;
   }
 
   var myMoveVel = myChar.getMoveVel();
-  if (Math.abs(lastUpdate.moveVel-myMoveVel) >= 0.1) {
+  if (true) {// if (Math.abs(lastUpdate.moveVel-myMoveVel) >= 0.1) {
     newUpdate.moveVel = myMoveVel;
     lastUpdate.moveVel = newUpdate.moveVel;
     sendUpd = true;
   }
 
   var myAngle = myChar.getAngle();
-  if (Math.abs(lastUpdate.angle-myAngle) >= 0.1) {
+  if (true) {// if (Math.abs(lastUpdate.angle-myAngle) >= 0.1) {
     newUpdate.angle = myAngle;
     lastUpdate.angle = newUpdate.angle;
     sendUpd = true;
   }
 
   var myTurnVel = myChar.getTurnVel();
-  if (Math.abs(lastUpdate.turnVel-myTurnVel) >= 0.1) {
+  if (true) {// if (Math.abs(lastUpdate.turnVel-myTurnVel) >= 0.1) {
     newUpdate.turnVel = myTurnVel;
     lastUpdate.turnVel = newUpdate.turnVel;
     sendUpd = true;
   }
 
   var myTAngle = myChar.getTAngleTarget();
-  if (Math.abs(lastUpdate.tangle-myTAngle) >= 0.1) {
+  if (true) {// if (Math.abs(lastUpdate.tangle-myTAngle) >= 0.1) {
     newUpdate.tangle = myTAngle;
     lastUpdate.tangle = newUpdate.tangle;
     sendUpd = true;
@@ -641,64 +344,30 @@ var data = {
 var spriteSheet = new createjs.SpriteSheet(data);
 
 function checkDamage(x, y, info) {
-  var startRange = 20;
-  var endRange = 55;
+  var startRange = 20*20;
+  var endRange = 55*55;
 
   var infoPos = info.getPosition();
 
   var dX = Math.abs(x - infoPos.x);
   var dY = Math.abs(y - infoPos.y);
-  var dist = Math.sqrt(dX*dX + dY*dY);
+  var distSq = dX*dX + dY*dY;
 
-  if (dist < startRange || dist >= endRange) {
+  if (distSq >= endRange) {
     return;
   }
 
-  var damageMag = (dist - startRange) / (endRange - startRange);
+  var damageMag = (distSq - startRange) / (endRange - startRange);
   myChar.health -= damageMag * 20;
-
   if (myChar.health < 0) {
     myChar.health = 0;
   }
-}
 
-var listenDistMin = 400;
-var listenDistMax = 1400;
-var playingSounds = [];
-function createSound(name, x, y) {
-  return;
-
-  var sound = createjs.Sound.play(name);
-  sound.x = x;
-  sound.y = y;
-  updateSound(sound);
-  sound.addEventListener("loop", function() {
-    var sndIdx = playingSounds.indexOf(sound);
-    if (sndIdx >= 0) {
-      playingSounds.splice(sndIdx, 1);
-    }
+  primus.nemit('health', {
+    health: myChar.health
   });
-  playingSounds.push(sound);
 }
-setTimeout(function() {
-  for (var i = 0; i < playingSounds.length; ++i) {
-    updateSound(playingSounds[i]);
-  }
-}, 500);
-function updateSound(sound) {
-  var playerPos = myChar.getPosition();
-  var dX = playerPos.x - sound.x;
-  var dY = playerPos.y - sound.y;
-  var dist = Math.sqrt(dX*dX+dY*dY);
 
-  var volume = (dist-listenDistMin) / (listenDistMax-listenDistMin);
-  if (volume < 0) {
-    volume = 0;
-  } else if (volume > 1.0) {
-    volume = 1;
-  }
-  sound.volume = 1 - volume;
-}
 
 function triggerHit(x, y) {
   checkDamage(x, y, myChar);
@@ -715,7 +384,11 @@ function triggerHit(x, y) {
 
   lyrProjs.addChild(anim);
 
-  createSound('explosion', x, y);
+  soundMgr.play({
+    name: 'explosion',
+    x: x,
+    y: y
+  });
 }
 
 function tickChars(dt) {
@@ -731,36 +404,16 @@ function tickProjs(dt) {
   }
 }
 
+var netRenderer = null;
 function setupWorld() {
   world = Physics({
     timestep: 1000 / 200
   });
 
-  Physics.body('projectile', 'circle', function(parent) {
-    return {
-      init: function(options) {
-        parent.init.call(this, options);
-      }
-    };
-  });
+  netRenderer = Physics.renderer('netrender');
+  world.add( netRenderer );
 
-  Physics.body('tankBody', 'circle', function(parent) {
-    return {
-      init: function(options) {
-        parent.init.call(this, options);
-      }
-    };
-  });
-
-  Physics.body('tankTurret', 'convex-polygon', function(parent) {
-    return {
-      init: function(options) {
-        parent.init.call(this, options);
-      }
-    };
-  });
-
-  world.add( Physics.renderer('easlejs', {stage:grpGame}) );
+  //world.add( Physics.renderer('easlejs', {stage:grpGame}) );
   world.add( Physics.behavior('custom-collisions') );
   world.add( Physics.behavior('sweep-prune') );
   world.add( Physics.behavior('custom-responder') );
@@ -867,15 +520,24 @@ var netbpsGraph = null;
 var netppsGraph = null;
 var fpsGraph = null;
 
+var localDrawer = new NetRenderDrawer({
+  fillColor: 'rgba(255,255,0,0.1)',
+  strokeColor: 'rgba(255,255,0,0.3)'
+});
+var netDrawer = new NetRenderDrawer({
+  fillColor: 'rgba(0,0,255,0.1)',
+  strokeColor: 'rgba(0,0,255,0.3)'
+});
+
 function tick(e) {
   fpsHist.log(1);
 
   tickInput(e.delta);
 
-  world.step(e.time);
-
   tickChars(e.delta);
   tickProjs(e.delta);
+
+  world.step(e.time);
 
   netbpsGraph.update();
   netppsGraph.update();
@@ -884,8 +546,14 @@ function tick(e) {
   netUpdate();
   if (world.renderer()) {
     world.render();
+
+    var drawData = netRenderer.flush();
+    localDrawer.draw(drawData);
   }
   stage.update();
+
+  var myPosition = myChar.getPosition();
+  soundMgr.setPosition(myPosition.x, myPosition.y);
 
   adjustViewport();
 
@@ -957,12 +625,14 @@ function setup() {
   lyrProjs = new createjs.Container();
   lyrMapT = new createjs.Container();
   lyrNames = new createjs.Container();
+  lyrDebug = new createjs.Container();
 
   grpGame.addChild(lyrMapB);
   grpGame.addChild(lyrChars);
   grpGame.addChild(lyrProjs);
   grpGame.addChild(lyrMapT);
   grpGame.addChild(lyrNames);
+  grpGame.addChild(lyrDebug);
 
   var graphX = viewportW - 10 - 300;
   var graphY = viewportH + 10 - (60+10)*3;
@@ -991,8 +661,6 @@ function setup() {
   };
 
   myChar = new Tank(world, myCharOpts, TankVis);
-  myChar.health = 100;
-  myChar.ammo = 30;
 
   createjs.Ticker.addEventListener("tick", tick);
   createjs.Ticker.setFPS(30);
@@ -1000,6 +668,5 @@ function setup() {
 
 $(document).ready(function() {
   stage = new createjs.Stage("game");
-  setup();
   startConn();
 });

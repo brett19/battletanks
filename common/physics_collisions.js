@@ -1,3 +1,7 @@
+if (typeof require === 'function') {
+  Physics = require('./physicsjs-full-0.5.3.min');
+}
+
 Physics.behavior('custom-collisions', function( parent ){
 
   var PUBSUB_CANDIDATES = 'collisions:candidates';
