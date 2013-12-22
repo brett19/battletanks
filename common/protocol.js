@@ -6,15 +6,24 @@ function encodePacket(cmd, args) {
   var buf = null;
   var i = 0;
 
-  if (cmd === 'move' && args.uuid === undefined) {
-    buf = bops.create(1 + 24);
+  if (cmd === 'move') {
+    if (args.oid !== undefined) {
+      buf = bops.create(1 + 28);
+    } else {
+      buf = bops.create(1 + 24);
+    }
+
     bops.writeInt8(buf, 1, i);
-    bops.writeFloatBE(buf, args.pos.x, 1);
-    bops.writeFloatBE(buf, args.pos.y, 5);
-    bops.writeFloatBE(buf, args.moveVel, 9);
-    bops.writeFloatBE(buf, args.turnVel, 13);
-    bops.writeFloatBE(buf, args.angle, 17);
-    bops.writeFloatBE(buf, args.tangle, 21);
+    bops.writeFloatBE(buf, args.pos.x, 1+0);
+    bops.writeFloatBE(buf, args.pos.y, 1+4);
+    bops.writeFloatBE(buf, args.moveVel, 1+8);
+    bops.writeFloatBE(buf, args.turnVel, 1+12);
+    bops.writeFloatBE(buf, args.angle, 1+16);
+    bops.writeFloatBE(buf, args.tangle, 1+20);
+
+    if (args.oid !== undefined) {
+      bops.writeInt32BE(buf, args.oid, 1+24);
+    }
   } else {
     var cmdBuf = bops.from(cmd);
 
@@ -64,13 +73,14 @@ function decodePacket(data) {
 
     return ['move', {
       pos: {
-        x: bops.readFloatBE(buf, 1),
-        y: bops.readFloatBE(buf, 5)
+        x: bops.readFloatBE(buf, 1+0),
+        y: bops.readFloatBE(buf, 1+4)
       },
-      moveVel: bops.readFloatBE(buf, 9),
-      turnVel: bops.readFloatBE(buf, 13),
-      angle: bops.readFloatBE(buf, 17),
-      tangle: bops.readFloatBE(buf, 21)
+      moveVel: bops.readFloatBE(buf, 1+8),
+      turnVel: bops.readFloatBE(buf, 1+12),
+      angle: bops.readFloatBE(buf, 1+16),
+      tangle: bops.readFloatBE(buf, 1+20),
+      oid: buf.length > (1+24) ? bops.readInt32BE(buf, 1+24) : undefined
     }];
   } else {
     throw new Error('invalid command number');

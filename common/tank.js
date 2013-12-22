@@ -3,6 +3,17 @@ var speedMag = 0.2;
 var tspeedClamp = 180;33
 
 function Tank(world, opts, VisClass) {
+  if (opts.state) {
+    opts.x = opts.state.pos.x;
+    opts.y = opts.state.pos.y;
+  }
+
+  this.oid = opts.oid;
+  this.uuid = opts.uuid;
+  this.name = opts.name;
+  this.health = opts.health !== undefined ? opts.health : 100;
+  this.ammo = opts.ammo !== undefined ? opts.ammo : 30;
+
   this.physWorld = world;
   this.view = null;
   this.moveVel = 0;
@@ -13,12 +24,6 @@ function Tank(world, opts, VisClass) {
   this.drX = 0;
   this.drY = 0;
   this.drAngle = 0;
-
-  // Other Props
-  this.uuid = opts.uuid;
-  this.name = opts.name;
-  this.health = opts.health !== undefined ? opts.health : 100;
-  this.ammo = opts.ammo !== undefined ? opts.ammo : 30;
 
   var physBody = Physics.body('tankBody', {
     x: opts.x,
@@ -43,6 +48,10 @@ function Tank(world, opts, VisClass) {
 
   if (VisClass) {
     this.view = new VisClass(this, opts);
+  }
+
+  if (opts.state) {
+    this.updateByNetInfo(opts.state, true);
   }
 
   this.update(0);
@@ -187,6 +196,46 @@ Tank.prototype.setDRPosition = function(x, y) {
 Tank.prototype.setDRAngle = function(val) {
   var bodyState = this.physBody.state;
   this.drAngle = val - bodyState.angular.pos;
+};
+
+// Force to a position
+Tank.prototype.setPosition = function(x, y) {
+  var bodyState = this.physBody.state;
+  bodyState.pos.set(x, y);
+  bodyState.old.pos.set(x, y);
+};
+
+// Force to an angle
+Tank.prototype.setAngle = function(angle) {
+  var bodyState = this.physBody.state;
+  bodyState.angular.pos = angle;
+  bodyState.old.angular.pos = angle;
+};
+
+Tank.prototype.getNetInfo = function() {
+  var newUpdate = {};
+  newUpdate.pos = this.getPosition();
+  newUpdate.moveVel = this.getMoveVel();
+  newUpdate.angle = this.getAngle();
+  newUpdate.turnVel = this.getTurnVel();
+  newUpdate.tangle = this.getTAngleTarget();
+  return newUpdate;
+};
+
+Tank.prototype.updateByNetInfo = function(info, auth) {
+  if (!auth) {
+    this.setDRPosition(info.pos.x, info.pos.y);
+    this.setMoveVel(info.moveVel);
+    this.setDRAngle(info.angle);
+    this.setTurnVel(info.turnVel);
+    this.setTAngleTarget(info.tangle);
+  } else {
+    this.setPosition(info.pos.x, info.pos.y);
+    this.setMoveVel(info.moveVel);
+    this.setAngle(info.angle);
+    this.setTurnVel(info.turnVel);
+    this.setTAngleTarget(info.tangle);
+  }
 };
 
 Tank.prototype.getFireInfo = function() {

@@ -27,7 +27,7 @@ NetRenderDrawer.prototype.newShape = function(shapeId, geom) {
   if (this.shapeCache.length > 0) {
     shape = this.shapeCache.pop();
   } else {
-    var shape = new createjs.Shape();
+    shape = new createjs.Shape();
   }
   shape.visible = false;
   lyrDebug.addChild(shape);

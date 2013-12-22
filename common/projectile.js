@@ -1,5 +1,14 @@
 function Projectile(world, opts, VisClass) {
-  this.physWorld = world;
+  if (opts.state) {
+    opts.x = opts.state.pos.x;
+    opts.y = opts.state.pos.y;
+    opts.angle = opts.state.angle;
+  }
+
+  this.oid = opts.oid;
+
+  this.world = world;
+  this.physWorld = world.physWorld;
   this.view = null;
   this.fireTime = (new Date()).getTime();
   this.speed = 0.3;
@@ -19,7 +28,7 @@ function Projectile(world, opts, VisClass) {
 
   var self = this;
   this.physBall.collisionHandler = function() {
-    boomProjectile(self);
+    world.explodeProjectile(self);
     return false;
   };
 
@@ -46,7 +55,7 @@ Projectile.prototype.update = function(dt) {
   //         is looped in order to call this update function itself.
   var curTime = (new Date()).getTime();
   if (curTime - this.fireTime >= 2000) {
-    boomProjectile(this);
+    this.world.explodeProjectile(this);
   }
 
   if (this.view) {
@@ -62,6 +71,13 @@ Projectile.prototype.getPosition = function() {
 Projectile.prototype.getAngle = function() {
   var ballState = this.physBall.state;
   return ballState.angular.pos;
+};
+
+Projectile.prototype.getNetInfo = function() {
+  var state = {};
+  state.pos = this.getPosition();;
+  state.angle = this.getAngle();
+  return state;
 };
 
 if (typeof module !== 'undefined') {

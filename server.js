@@ -5,52 +5,113 @@ var UniRooms = require('universes').Rooms;
 var Physics = require('./physics');
 var Tank = require('./common/tank');
 var Projectile = require('./common/projectile');
+var Crate = require('./common/crate');
+var DropPlane = require('./common/dropplane');
 var UniPrimus = require('./universes_proto');
+var GameWorld = require('./common/gameworld');
 
 function physHrTime() {
   var t = process.hrtime();
   return (t[0] * 1000) + (t[1] / 1000000);
 }
 
-var world = Physics({
-  timestep: 1000 / 200
-});
+var gameWorld = new GameWorld({});
 
+var world = gameWorld.physWorld;
 var netRenderer = Physics.renderer('netrender');
 world.add( netRenderer );
 
-world.add( Physics.behavior('custom-collisions') );
-world.add( Physics.behavior('sweep-prune') );
-world.add( Physics.behavior('custom-responder') );
+var uniqueOid = 1;
+function genOid() {
+  return uniqueOid++;
+}
+
+function newDropPlane() {
+  var borderSize = 50;
+  var mapWidth = 1000;
+  var mapHeight = 500;
+
+  var startX = -400;
+  var startY = borderSize + (Math.random() * (mapHeight-borderSize*2));
+  var endX = mapWidth + 400;
+  var endY = borderSize + (Math.random() * (mapHeight-borderSize*2));
+  var dropX = borderSize + (Math.random() * (mapWidth-borderSize*2));
+  var angle = Math.atan2(endY-startY, endX-startX) * (180/Math.PI);
+
+  var plane = gameWorld.createDropPlane({
+    oid: genOid(),
+    x: startX,
+    y: startY,
+    angle: angle,
+    endPos: endX,
+    dropPos: dropX
+  });
+
+  var mainRoom = rooms.findRoom('main');
+  if (mainRoom) {
+    mainRoom.nemit('addplane', {
+      oid: plane.oid,
+      state: plane.getNetInfo()
+    });
+  }
+
+  return plane;
+}
+
+
+gameWorld.on('plane:dropCrate', function(x, y) {
+  var crate = gameWorld.createCrate({
+    oid: genOid(),
+    x: x - 60,
+    y: y
+  });
+
+  var mainRoom = rooms.findRoom('main');
+  if (mainRoom) {
+    mainRoom.nemit('dropcrate', {
+      oid: crate.oid,
+      state: crate.getNetInfo()
+    });
+  }
+
+  return crate;
+});
+
+setInterval(function() {
+  var crateCount = 0;
+  for (var i = 0; i < gameWorld.objects.length; ++i) {
+    if (gameWorld.objects[i] instanceof Crate) {
+      crateCount++;
+    } else if (gameWorld.objects[i] instanceof DropPlane) {
+      crateCount++;
+    }
+  }
+  if (crateCount < 20) {
+    newDropPlane();
+  }
+}, 400);
+
 
 var physListeners = [];
 
-var lastTime = null;
 setInterval(function() {
   var time = physHrTime();
-  var dt = 0;
-  if (lastTime !== null) {
-    dt = time - lastTime;
-  }
-  lastTime = time;
-
   if (world){
-    world.step( time );
+    gameWorld.step(time);
+
     world.render();
+
     var draws = netRenderer.flush();
 
-    var mainRoom = rooms.findRoom('main');
-    if (mainRoom) {
-      for (var i = 0; i < mainRoom.clients.length; ++i) {
-        var client = mainRoom.clients[i];
-        if (client.tank) {
-          client.tank.update(dt);
-        }
-      }
+    var objs = [];
+    for (var i = 0; i < gameWorld.objects.length; ++i) {
+      var pos = gameWorld.objects[i].getPosition();
+      objs.push(pos);
+    }
 
-      for (var i = 0; i < physListeners.length; ++i) {
-        physListeners[i].nemit('phys/debugDraw', draws);
-      }
+    for (var i = 0; i < physListeners.length; ++i) {
+      physListeners[i].nemit('phys/debugDraw', draws);
+      physListeners[i].nemit('world/debugDraw', objs);
     }
   }
 }, 1000 / 60);
@@ -74,7 +135,7 @@ app.static('/client/common', __dirname + '/common');
 
 app.non('join', function(client, args) {
   client.name = args.name;
-  client.color = args.color;
+
   client.x = args.x;
   client.y = args.y;
 
@@ -91,38 +152,49 @@ app.non('join', function(client, args) {
 rooms.on('clientJoined', function(room, client) {
   log.debug('rooms:clientJoined', room.uuid, client.uuid);
 
-  // Send my addplayer to everyone except me
-  room.nemit(client, 'addplayer', {
-    uuid: client.uuid,
-    name: client.name,
-    x: client.x,
-    y: client.y
-  });
-
-  var tank = new Tank(world, {
-    uuid: client.uuid,
+  var tank = gameWorld.createTank({
+    oid: genOid(),
     name: client.name,
     x: client.x,
     y: client.y
   });
   client.tank = tank;
 
-  for (var i = 0; i < room.clients.length; ++i) {
-    var oclient = room.clients[i];
+  // Send my addplayer to everyone except me
+  room.nemit(client, 'addtank', {
+    oid: tank.oid,
+    name: tank.name,
+    state: tank.getNetInfo()
+  });
 
-    // Don't update me about myself
-    if (oclient === client) {
+  for (var i = 0; i < gameWorld.objects.length; ++i) {
+    var obj = gameWorld.objects[i];
+
+    if (obj === client.tank) {
       continue;
     }
 
-    // Tell this client about another
-    client.nemit('addplayer', {
-      uuid: oclient.uuid,
-      name: oclient.name,
-      color: oclient.color,
-      x: oclient.x,
-      y: oclient.y
-    });
+    if (obj instanceof Tank) {
+      client.nemit('addtank', {
+        oid: obj.oid,
+        name: obj.name,
+        state: obj.getNetInfo()
+      });
+    } else if (obj instanceof Projectile) {
+      client.nemit('addproj', {
+        state: obj.getNetInfo()
+      });
+    } else if (obj instanceof Crate) {
+      client.nemit('addcrate', {
+        oid: obj.oid,
+        state: obj.getNetInfo()
+      });
+    } else if (obj instanceof DropPlane) {
+      client.nemit('addplane', {
+        oid: obj.oid,
+        state: obj.getNetInfo()
+      });
+    }
   }
 
   if (client.socket.address.ip === '127.0.0.1') {
@@ -133,14 +205,15 @@ rooms.on('clientJoined', function(room, client) {
 rooms.on('clientLeft', function(room, client) {
   log.debug('rooms:clientLeft', room.uuid, client.uuid);
 
-  if (client.tank) {
-    client.tank.remove();
+  var tank = client.tank;
+  if (tank) {
+    gameWorld.removeObject(tank);
     client.tank = null;
-  }
 
-  room.nemit('delplayer', {
-    uuid: client.uuid
-  });
+    room.nemit('deltank', {
+      oid: tank.oid
+    });
+  }
 
   var listenerIdx = physListeners.indexOf(client);
   if (listenerIdx >= 0) {
@@ -148,46 +221,28 @@ rooms.on('clientLeft', function(room, client) {
   }
 });
 
-rooms.non('moveTo', function(room, client, cmd, args) {
-  client.x = args.x;
-  client.y = args.y;
-
-  room.nemit(client, 'moveTo', {
-    uuid: client.uuid,
-    x: client.x,
-    y: client.y
-  });
-});
-
 rooms.non('move', function(room, client, cmd, args) {
-  args.uuid = client.uuid;
-
-  var obj = client.tank;
-  if (args.pos !== undefined) {
-    obj.setDRPosition(args.pos.x, args.pos.y);
-  }
-  if (args.moveVel !== undefined) {
-    obj.setMoveVel(args.moveVel);
-  }
-  if (args.angle !== undefined) {
-    obj.setDRAngle(args.angle);
-  }
-  if (args.turnVel !== undefined) {
-    obj.setTurnVel(args.turnVel);
-  }
-  if (args.tangle !== undefined) {
-    obj.setTAngleTarget(args.tangle);
+  var tank = client.tank;
+  if (!tank) {
+    return;
   }
 
+  tank.updateByNetInfo(args, true);
+
+  args.oid = tank.oid;
   room.nemit(client, cmd, args);
 });
 rooms.non('fire', function(room, client, cmd, args) {
-  args.uuid = client.uuid;
-  args.projUuid = UniCore.uuid();
-  room.nemit(client, cmd, args);
+  var proj = gameWorld.createProjectile({
+    x: args.x,
+    y: args.y,
+    angle: args.angle
+  });
+
+  room.nemit(client, 'addproj', {state: proj.getNetInfo()});
 });
 rooms.non('health', function(room, client, cmd, args) {
-  args.uuid = client.uuid;
+  args.oid = client.tank.oid;
   room.nemit(client, cmd, args);
 });
 

@@ -6,25 +6,54 @@ var lyrMapT = null;
 var lyrMapB = null;
 var lyrChars = null;
 var lyrProjs = null;
+var lyrItems = null;
+var lyrPlanes = null;
+var lyrChutes = null;
 var lyrNames = null;
 var lyrDebug = null;
+var lyrDebugX = null;
 
 var packetHist = new BucketStats(1000, 60);
 var fpsHist = new BucketStats(1000, 60);
 
-
-var oPlayers = [];
-var mProjs = [];
-
 var maxHealth = 100;
 var maxAmmo = 30;
 
-
 createjs.Sound.registerSound("tank-firing.mp3", "tankFiring");
 createjs.Sound.registerSound("explosion.mp3", "explosion");
+createjs.Sound.registerSound("plane_engine.mp3", "planeengine");
 
+createjs.Sound.setVolume(0.10);
 
+var data = {
+  images: ["explosion_strip10.png"],
+  framerate: 27,
+  frames: {width:58, height:56},
+  animations: {
+    boom:[0,9]
+  }
+};
+var spriteSheet = new createjs.SpriteSheet(data);
 
+var dataCP = {
+  images: ["cratePop.png"],
+  framerate: 18,
+  frames: {width:230, height:203},
+  animations: {
+    boom:[0,7]
+  }
+};
+var cratePopSheet = new createjs.SpriteSheet(dataCP);
+
+var dataChute = {
+  images: ["chute.png"],
+  framerate: 10,
+  frames: {width:52, height:56},
+  animations: {
+    boom:[0,5]
+  }
+};
+var chuteSheet = new createjs.SpriteSheet(dataChute);
 
 function TankVis(obj, opts) {
   this.obj = obj;
@@ -112,39 +141,81 @@ ProjectileVis.prototype.update = function() {
 
 
 
+function CrateVis(obj, opts) {
+  this.obj = obj;
 
+  var objPos = this.obj.getPosition();
 
+  this.img = new createjs.Bitmap('crate.png');
+  this.img.regX = 17;
+  this.img.regY = 16;
+  this.img.x = objPos.x;
+  this.img.y = objPos.y;
+  lyrItems.addChild(this.img);
 
+  if (opts.isDrop) {
+    var self = this;
 
-function addProjectile(opts) {
-  var proj = new Projectile(world, opts, ProjectileVis);
-  mProjs.push(proj);
+    //this.img.visible = false;
 
-  soundMgr.play({
-    name: 'tankFiring',
-    x: opts.x,
-    y: opts.y
-  })
-
-  return proj;
-}
-
-function boomProjectile(proj) {
-  var projPosition = proj.getPosition();
-
-  triggerHit(projPosition.x, projPosition.y);
-
-  removeProjectile(proj);
-}
-
-function removeProjectile(proj) {
-  proj.remove();
-
-  var projIdx = mProjs.indexOf(proj);
-  if (projIdx >= 0) {
-    mProjs.splice(projIdx, 1);
+    this.dropImg = new createjs.Sprite(chuteSheet, "boom");
+    this.dropImg.regX = 23;
+    this.dropImg.regY = 24;
+    this.dropImg.x = objPos.x;
+    this.dropImg.y = objPos.y;
+    this.dropImg.on('animationend', function() {
+      lyrChutes.removeChild(self.dropImg);
+      self.dropImg = null;
+      self.img.visible = true;
+    });
+    lyrChutes.addChild(this.dropImg);
   }
 }
+
+CrateVis.prototype.remove = function() {
+  lyrItems.removeChild(this.img);
+  if (this.dropImg) {
+    lyrChutes.removeChild(this.dropImg);
+  }
+};
+
+CrateVis.prototype.update = function() {
+
+};
+
+
+function DropPlaneVis(obj, opts) {
+  this.obj = obj;
+
+  this.img = new createjs.Bitmap('enemy_plane_4.png');
+  this.img.regX = 97;
+  this.img.regY = 71;
+  lyrPlanes.addChild(this.img);
+
+  this.sound = soundMgr.play({
+    name: 'planeengine',
+    volume: 0.4,
+    loop: true
+  });
+}
+
+DropPlaneVis.prototype.remove = function() {
+  lyrPlanes.removeChild(this.img);
+  soundMgr.removeSound(this.sound);
+};
+
+DropPlaneVis.prototype.update = function() {
+  var objPos = this.obj.getPosition();
+  this.img.x = objPos.x;
+  this.img.y = objPos.y;
+  this.img.rotation = this.obj.getAngle();
+
+  this.sound.x = objPos.x;
+  this.sound.y = objPos.y;
+};
+
+
+
 
 
 
@@ -155,7 +226,7 @@ function fireProjectile() {
   myChar.ammo--;
 
   var fireInfo = myChar.getFireInfo();
-  addProjectile(fireInfo);
+  gameWorld.createProjectile(fireInfo);
 
   primus.nemit('fire', {
     x: fireInfo.x,
@@ -165,65 +236,6 @@ function fireProjectile() {
 }
 
 function start() {
-  setup();
-
-  primus.non('phys/debugDraw', function(args) {
-    netDrawer.draw(args);
-  });
-
-  primus.non('addplayer', function(args) {
-    var tank = new Tank(world, args, TankVis);
-    oPlayers.push(tank);
-  });
-
-  primus.non('delplayer', function(args) {
-    for (var i = 0; i < oPlayers.length; ++i) {
-      if (oPlayers[i].uuid === args.uuid) {
-        var obj = oPlayers.splice(i, 1);
-        obj[0].remove();
-        break;
-      }
-    }
-  });
-
-  primus.non('health', function(args) {
-    for (var i = 0; i < oPlayers.length; ++i) {
-      if (oPlayers[i].uuid == args.uuid) {
-        var obj = oPlayers[i];
-        obj.setHealth(args.health);
-        break;
-      }
-    }
-  });
-
-  primus.non('move', function(args) {
-    for (var i = 0; i < oPlayers.length; ++i) {
-      if (oPlayers[i].uuid == args.uuid) {
-        var obj = oPlayers[i];
-
-        if (args.pos !== undefined) {
-          obj.setDRPosition(args.pos.x, args.pos.y);
-        }
-        if (args.moveVel !== undefined) {
-          obj.setMoveVel(args.moveVel);
-        }
-        if (args.angle !== undefined) {
-          obj.setDRAngle(args.angle);
-        }
-        if (args.turnVel !== undefined) {
-          obj.setTurnVel(args.turnVel);
-        }
-        if (args.tangle !== undefined) {
-          obj.setTAngleTarget(args.tangle);
-        }
-        break;
-      }
-    }
-  });
-
-  primus.non('fire', function(args) {
-    addProjectile(args);
-  });
 
   var myPosition = myChar.getPosition();
   primus.nemit('join', {
@@ -232,17 +244,8 @@ function start() {
     y: myPosition.y,
     color: myChar.color
   });
-
-  oPlayers = [];
 }
 
-var lastUpdate = {
-  pos: {x: 0, y: 0},
-  moveVel: 0,
-  turnVel: 0,
-  angle: 0,
-  tangle: 0
-};
 var lastUpd = (new Date()).getTime();
 function netUpdate() {
   var curTime = (new Date()).getTime();
@@ -251,47 +254,9 @@ function netUpdate() {
   }
   lastUpd = curTime;
 
-  var newUpdate = {};
-  var sendUpd = false;
+  var newUpdate = myChar.getNetInfo();
 
-  var myPos = myChar.getPosition();
-  if (true) {// if (Math.abs(lastUpdate.pos.x-myPos.x) >= 0.1 || Math.abs(lastUpdate.pos.y-myPos.y) >= 0.1) {
-    newUpdate.pos = myPos;
-    lastUpdate.pos = newUpdate.pos;
-    sendUpd = true;
-  }
-
-  var myMoveVel = myChar.getMoveVel();
-  if (true) {// if (Math.abs(lastUpdate.moveVel-myMoveVel) >= 0.1) {
-    newUpdate.moveVel = myMoveVel;
-    lastUpdate.moveVel = newUpdate.moveVel;
-    sendUpd = true;
-  }
-
-  var myAngle = myChar.getAngle();
-  if (true) {// if (Math.abs(lastUpdate.angle-myAngle) >= 0.1) {
-    newUpdate.angle = myAngle;
-    lastUpdate.angle = newUpdate.angle;
-    sendUpd = true;
-  }
-
-  var myTurnVel = myChar.getTurnVel();
-  if (true) {// if (Math.abs(lastUpdate.turnVel-myTurnVel) >= 0.1) {
-    newUpdate.turnVel = myTurnVel;
-    lastUpdate.turnVel = newUpdate.turnVel;
-    sendUpd = true;
-  }
-
-  var myTAngle = myChar.getTAngleTarget();
-  if (true) {// if (Math.abs(lastUpdate.tangle-myTAngle) >= 0.1) {
-    newUpdate.tangle = myTAngle;
-    lastUpdate.tangle = newUpdate.tangle;
-    sendUpd = true;
-  }
-
-  if (sendUpd) {
-    primus.nemit('move', newUpdate);
-  }
+  primus.nemit('move', newUpdate);
 }
 
 
@@ -333,16 +298,6 @@ function tickInput(dt) {
   myChar.setTAngleTarget(mouseAngle - charAngle);
 }
 
-var data = {
-  images: ["explosion_strip10.png"],
-  framerate: 7,
-  frames: {width:58, height:56},
-  animations: {
-    boom:[0,9]
-  }
-};
-var spriteSheet = new createjs.SpriteSheet(data);
-
 function checkDamage(x, y, info) {
   var startRange = 20*20;
   var endRange = 55*55;
@@ -368,8 +323,19 @@ function checkDamage(x, y, info) {
   });
 }
 
+function explodeCrate(x, y) {
+  var animx = new createjs.Sprite(cratePopSheet, "boom");
+  animx.regX = 119;
+  animx.regY = 96;
+  animx.x = x;
+  animx.y = y;
+  animx.on('animationend', function() {
+    lyrItems.removeChild(animx);
+  });
+  lyrItems.addChild(animx);
+}
 
-function triggerHit(x, y) {
+function explodeProjectile(x, y) {
   checkDamage(x, y, myChar);
 
   var anim = new createjs.Sprite(spriteSheet, "boom");
@@ -377,11 +343,9 @@ function triggerHit(x, y) {
   anim.regY = 56 / 2;
   anim.x = x;
   anim.y = y;
-
   anim.on('animationend', function() {
     lyrProjs.removeChild(anim);
   });
-
   lyrProjs.addChild(anim);
 
   soundMgr.play({
@@ -391,92 +355,20 @@ function triggerHit(x, y) {
   });
 }
 
-function tickChars(dt) {
-  myChar.update(dt);
-  for (var i = 0; i < oPlayers.length; ++i) {
-    oPlayers[i].update(dt);
-  }
-}
-
-function tickProjs(dt) {
-  for (var i = 0; i < mProjs.length; ++i) {
-    mProjs[i].update(dt);
-  }
-}
-
+var gameWorld = null;
 var netRenderer = null;
 function setupWorld() {
-  world = Physics({
-    timestep: 1000 / 200
-  });
+  gameWorld = new GameWorld({});
+
+  world = gameWorld.physWorld;
+
+  gameWorld.on('projectile:explode', explodeProjectile);
+  gameWorld.on('crate:explode', explodeCrate);
 
   netRenderer = Physics.renderer('netrender');
   world.add( netRenderer );
-
-  //world.add( Physics.renderer('easlejs', {stage:grpGame}) );
-  world.add( Physics.behavior('custom-collisions') );
-  world.add( Physics.behavior('sweep-prune') );
-  world.add( Physics.behavior('custom-responder') );
-
-  var borderLeft = Physics.body('convex-polygon', {
-    // place the center of the square at (0, 0)
-    x: -viewBorder/2,
-    y: mapHeight/2,
-    fixed: true,
-    vertices: [
-      {x:-viewBorder, y:-viewBorder},
-      {x:0, y: 0},
-      {x:0, y: mapHeight},
-      {x:-viewBorder, y: mapHeight+viewBorder}
-    ]
-  });
-  world.add(borderLeft);
-
-  var borderRight = Physics.body('convex-polygon', {
-    // place the center of the square at (0, 0)
-    x: mapWidth+viewBorder/2,
-    y: mapHeight/2,
-    fixed: true,
-    vertices: [
-      {x:viewBorder, y: -viewBorder},
-      {x:0, y:0},
-      {x:0, y: mapHeight},
-      {x:viewBorder, y: mapHeight+viewBorder}
-    ]
-  });
-  world.add(borderRight);
-
-  var borderTop = Physics.body('convex-polygon', {
-    // place the center of the square at (0, 0)
-    x: mapWidth/2,
-    y: -viewBorder/2,
-    fixed: true,
-    vertices: [
-      {x:-viewBorder, y:-viewBorder},
-      {x:mapWidth+viewBorder, y: -viewBorder},
-      {x:mapWidth, y: 0},
-      {x:0, y: 0}
-    ]
-  });
-  world.add(borderTop);
-
-  var borderTop = Physics.body('convex-polygon', {
-    // place the center of the square at (0, 0)
-    x: mapWidth/2,
-    y: mapHeight+viewBorder/2,
-    fixed: true,
-    vertices: [
-      {x:-viewBorder, y:mapHeight+viewBorder},
-      {x:mapWidth+viewBorder, y: mapHeight+viewBorder},
-      {x:mapWidth, y: mapHeight},
-      {x:0, y: mapHeight}
-    ]
-  });
-  world.add(borderTop);
 }
 
-var mapHeight = 3000;
-var mapWidth = 3000;
 var viewportW = 1200;
 var viewportH = 600;
 var viewBorder = 40;
@@ -521,8 +413,8 @@ var netppsGraph = null;
 var fpsGraph = null;
 
 var localDrawer = new NetRenderDrawer({
-  fillColor: 'rgba(255,255,0,0.1)',
-  strokeColor: 'rgba(255,255,0,0.3)'
+  fillColor: 'rgba(0,255,255,0.1)',
+  strokeColor: 'rgba(0,255,255,0.3)'
 });
 var netDrawer = new NetRenderDrawer({
   fillColor: 'rgba(0,0,255,0.1)',
@@ -534,10 +426,7 @@ function tick(e) {
 
   tickInput(e.delta);
 
-  tickChars(e.delta);
-  tickProjs(e.delta);
-
-  world.step(e.time);
+  gameWorld.step(e.time);
 
   netbpsGraph.update();
   netppsGraph.update();
@@ -547,10 +436,9 @@ function tick(e) {
   if (world.renderer()) {
     world.render();
 
-    var drawData = netRenderer.flush();
-    localDrawer.draw(drawData);
+    localDrawer.draw(netRenderer.flush());
   }
-  stage.update();
+  stage.update(e);
 
   var myPosition = myChar.getPosition();
   soundMgr.setPosition(myPosition.x, myPosition.y);
@@ -621,18 +509,26 @@ function setup() {
   stage.addChild(grpGame);
 
   lyrMapB = new createjs.Container();
+  lyrItems = new createjs.Container();
   lyrChars = new createjs.Container();
   lyrProjs = new createjs.Container();
   lyrMapT = new createjs.Container();
+  lyrChutes = new createjs.Container();
+  lyrPlanes = new createjs.Container();
   lyrNames = new createjs.Container();
   lyrDebug = new createjs.Container();
+  lyrDebugX = new createjs.Container();
 
   grpGame.addChild(lyrMapB);
+  grpGame.addChild(lyrItems);
   grpGame.addChild(lyrChars);
   grpGame.addChild(lyrProjs);
   grpGame.addChild(lyrMapT);
+  grpGame.addChild(lyrChutes);
+  grpGame.addChild(lyrPlanes);
   grpGame.addChild(lyrNames);
   grpGame.addChild(lyrDebug);
+  grpGame.addChild(lyrDebugX);
 
   var graphX = viewportW - 10 - 300;
   var graphY = viewportH + 10 - (60+10)*3;
@@ -660,13 +556,110 @@ function setup() {
     tangle: 0
   };
 
-  myChar = new Tank(world, myCharOpts, TankVis);
+  myChar = gameWorld.createTank(myCharOpts, TankVis);
 
   createjs.Ticker.addEventListener("tick", tick);
   createjs.Ticker.setFPS(30);
 }
 
+var debugObjs = [];
+var debugVisObjs = [];
+
+function _drawDebugObj(g) {
+  g.clear();
+  g.beginStroke('rgba(255,0,0,0.6)');
+  g.beginFill('rgba(255,0,0,0.4)');
+  g.drawCircle(0, 0, 6);
+  g.moveTo(0, 0);
+}
+function _drawDebugShape(x, y) {
+  var shape = null;
+  if (debugObjs.length > 0) {
+    shape = debugObjs.pop();
+  } else {
+    shape = new createjs.Shape();
+    _drawDebugObj(shape.graphics);
+    lyrDebugX.addChild(shape);
+  }
+
+  shape.visible = true;
+  shape.x = x;
+  shape.y = y;
+  debugVisObjs.push(shape);
+}
+function _resetDebugShapes() {
+  for (var i = 0; i < debugVisObjs.length; ++i) {
+    var ii = debugVisObjs.length - 1 - i;
+    debugVisObjs[ii].visible = false;
+    debugObjs.push(debugVisObjs[ii]);
+  }
+  debugVisObjs = [];
+}
+function drawDebugShapes(objs) {
+  _resetDebugShapes();
+  for (var j = 0; j < objs.length; ++j) {
+    _drawDebugShape(objs[j].x, objs[j].y);
+  }
+}
+
 $(document).ready(function() {
   stage = new createjs.Stage("game");
+
+  setup();
+
   startConn();
+
+  primus.non('phys/debugDraw', function(args) {
+    netDrawer.draw(args);
+  });
+  primus.non('world/debugDraw', function(args) {
+    drawDebugShapes(args);
+  });
+
+  primus.non('addtank', function(args) {
+    gameWorld.createTank(args, TankVis);
+  });
+
+  primus.non('deltank', function(args) {
+    var tank = gameWorld.getByOid(args.oid);
+    console.log(args, tank);
+    if (tank) {
+      gameWorld.removeObject(tank);
+    }
+  });
+
+  primus.non('addproj', function(args) {
+    gameWorld.createProjectile(args, ProjectileVis);
+  });
+
+  primus.non('dropcrate', function(args) {
+    args.isDrop = true;
+    gameWorld.createCrate(args, CrateVis);
+  });
+
+  primus.non('addcrate', function(args) {
+    gameWorld.createCrate(args, CrateVis);
+  });
+
+  primus.non('delcrate', function(args) {
+
+  });
+
+  primus.non('addplane', function(args) {
+    gameWorld.createDropPlane(args, DropPlaneVis);
+  });
+
+  primus.non('health', function(args) {
+    var tank = gameWorld.getByOid(args.oid);
+    if (tank) {
+      tank.setHealth(args.health);
+    }
+  });
+
+  primus.non('move', function(args) {
+    var tank = gameWorld.getByOid(args.oid);
+    if (tank) {
+      tank.updateByNetInfo(args, false);
+    }
+  });
 });
