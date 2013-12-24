@@ -1,6 +1,6 @@
-if (typeof require === 'function') {
-  Physics = require('./physicsjs-full-0.5.3.min');
-}
+if (typeof define !== 'function') { var define = require('amdefine')(module) }
+
+define(['./physicsjs-full-0.5.3.min'], function(Physics) {
 
 Physics.renderer('netrender', function(parent) {
   var uniqueId = 1;
@@ -88,4 +88,6 @@ Physics.renderer('netrender', function(parent) {
       ]);
     }
   };
+});
+
 });

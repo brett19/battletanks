@@ -1,6 +1,6 @@
-if (typeof require === 'function') {
-  Physics = require('./physicsjs-full-0.5.3.min');
-}
+if (typeof define !== 'function') { var define = require('amdefine')(module) }
+
+define(['./physicsjs-full-0.5.3.min'], function(Physics) {
 
 Physics.behavior('custom-responder', 'body-impulse-response', function(parent) {
   return {
@@ -36,4 +36,6 @@ Physics.behavior('custom-responder', 'body-impulse-response', function(parent) {
       parent.respond.call(this, data);
     }
   };
+});
+
 });

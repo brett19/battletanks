@@ -1,4 +1,5 @@
-// TODO: If you run into a crate on the server, but not the client.  We need to sync this somehow...
+if (typeof define !== 'function') { var define = require('amdefine')(module) }
+define(['./physics'], function(Physics) {
 
 function Crate(world, opts, VisClass) {
   if (opts.state) {
@@ -59,6 +60,5 @@ Crate.prototype.getNetInfo = function() {
   return state;
 };
 
-if (typeof module !== 'undefined') {
-  module.exports = Crate;
-}
+return Crate;
+});

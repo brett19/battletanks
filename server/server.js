@@ -2,13 +2,15 @@ var log = require('universes').logger;
 var UniApp = require('universes').App;
 var UniCore = require('universes').Core;
 var UniRooms = require('universes').Rooms;
-var Physics = require('./physics');
-var Tank = require('./common/tank');
-var Projectile = require('./common/projectile');
-var Crate = require('./common/crate');
-var DropPlane = require('./common/dropplane');
 var UniPrimus = require('./universes_proto');
-var GameWorld = require('./common/gameworld');
+var Physics = require('./../common/physics');
+var Tank = require('./../common/tank');
+var Projectile = require('./../common/projectile');
+var Crate = require('./../common/crate');
+var DropPlane = require('./../common/dropplane');
+var GameWorld = require('./../common/gameworld');
+
+
 
 function physHrTime() {
   var t = process.hrtime();
@@ -110,8 +112,12 @@ setInterval(function() {
     }
 
     for (var i = 0; i < physListeners.length; ++i) {
-      physListeners[i].nemit('phys/debugDraw', draws);
-      physListeners[i].nemit('world/debugDraw', objs);
+      var listener = physListeners[i];
+      if (!listener) {
+        console.log('Missing Listener!');
+      }
+      listener.nemit('phys/debugDraw', draws);
+      listener.nemit('world/debugDraw', objs);
     }
   }
 }, 1000 / 60);
@@ -130,8 +136,8 @@ var ws = new UniPrimus(app);
 var rooms = new UniRooms(app);
 
 app.static('/logos', './logos');
-app.static('/client', __dirname + '/client');
-app.static('/client/common', __dirname + '/common');
+app.static('/client', __dirname + '/../client');
+app.static('/common', __dirname + '/../common');
 
 app.non('join', function(client, args) {
   client.name = args.name;
@@ -197,10 +203,12 @@ rooms.on('clientJoined', function(room, client) {
     }
   }
 
+  /*
   if (client.socket.address.ip === '127.0.0.1') {
     physListeners.push(client);
     client.nemit('phys/debugDraw', netRenderer.shapeStream());
   }
+  */
 });
 rooms.on('clientLeft', function(room, client) {
   log.debug('rooms:clientLeft', room.uuid, client.uuid);

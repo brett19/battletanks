@@ -1,6 +1,5 @@
-if (typeof require === 'function') {
-  bops = require('./bops');
-}
+if (typeof define !== 'function') { var define = require('amdefine')(module) }
+define(['bops'], function(bops) {
 
 function encodePacket(cmd, args) {
   var buf = null;
@@ -50,8 +49,8 @@ function encodePacket(cmd, args) {
   return bops.to(buf, 'base64');
 }
 
-function decodePacket(data) {
-  var buf = bops.from(data, 'base64');
+function decodePacket(_buf) {
+  var buf = bops.from(_buf, 'base64');
   var i = 0;
 
   var cmdId = bops.readInt8(buf, i); i += 1;
@@ -83,11 +82,13 @@ function decodePacket(data) {
       oid: buf.length > (1+24) ? bops.readInt32BE(buf, 1+24) : undefined
     }];
   } else {
+    console.log('info', cmdId, buf);
     throw new Error('invalid command number');
   }
 }
 
-if (typeof module !== 'undefined') {
-  module.exports.encodePacket = encodePacket;
-  module.exports.decodePacket = decodePacket;
-}
+return {
+  encodePacket: encodePacket,
+  decodePacket: decodePacket
+};
+});

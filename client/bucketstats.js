@@ -1,3 +1,5 @@
+define([], function() {
+
 function BucketStats(interval, bucketCount) {
   this.interval = interval;
   this.bucketCount = bucketCount;
@@ -30,3 +32,6 @@ BucketStats.prototype.log = function(value) {
   bucket.value += value;
   bucket.count++;
 };
+
+return BucketStats;
+});

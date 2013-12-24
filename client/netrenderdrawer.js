@@ -1,6 +1,9 @@
+
 function NetRenderDrawer(opts) {
+  this.layer = opts.layer;
   this.fillColor = opts.fillColor;
   this.strokeColor = opts.strokeColor;
+
   this.shapes = {};
   this.shapeCache = [];
 }
@@ -30,7 +33,7 @@ NetRenderDrawer.prototype.newShape = function(shapeId, geom) {
     shape = new createjs.Shape();
   }
   shape.visible = false;
-  lyrDebug.addChild(shape);
+  this.layer.addChild(shape);
   this._drawShape(shape.graphics, geom);
 
   this.shapes[shapeId] = shape;
@@ -38,7 +41,7 @@ NetRenderDrawer.prototype.newShape = function(shapeId, geom) {
 
 NetRenderDrawer.prototype.releaseShape = function(shapeId) {
   var shape = this.shapes[shapeId];
-  lyrDebug.removeChild(shape);
+  this.layer.removeChild(shape);
   this.shapeCache.push(shape);
   delete this.shapes[shapeId];
 };

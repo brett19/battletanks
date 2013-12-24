@@ -192,10 +192,17 @@ function DropPlaneVis(obj, opts) {
   this.img.regY = 71;
   lyrPlanes.addChild(this.img);
 
+  var angleRad = obj.getAngle() / (180/Math.PI);
+  var objPos = this.obj.getPosition();
   this.sound = soundMgr.play({
     name: 'planeengine',
-    volume: 0.4,
-    loop: true
+    volume: 1.0,
+    loop: true,
+    x: objPos.x,
+    y: objPos.y,
+    vx: Math.cos(angleRad),
+    vy: Math.sin(angleRad),
+    f: 170
   });
 }
 
@@ -255,7 +262,6 @@ function netUpdate() {
   lastUpd = curTime;
 
   var newUpdate = myChar.getNetInfo();
-
   primus.nemit('move', newUpdate);
 }
 
@@ -421,6 +427,35 @@ var netDrawer = new NetRenderDrawer({
   strokeColor: 'rgba(0,0,255,0.3)'
 });
 
+var objDrawer = new DebugDrawer({
+  fillColor: 'rgba(255,0,0,0.4)',
+  strokeColor: 'rgba(255,0,0,0.6)',
+  radius: 8
+});
+var sndDrawer = new DebugDrawer({
+  fillColor: 'rgba(0,0,255,0.4)',
+  strokeColor: 'rgba(0,0,255,0.6)',
+  radius: 4
+});
+
+
+function drawDebugs() {
+  netbpsGraph.update();
+  netppsGraph.update();
+  fpsGraph.update();
+
+  localDrawer.draw(netRenderer.flush());
+
+  var sndObjs = [];
+  for (var i = 0; i < soundMgr.sounds.length; ++i) {
+    var sound = soundMgr.sounds[i];
+    sndObjs.push({x:sound.x, y:sound.y});
+  }
+  var lstObjs = [];
+  lstObjs.push({x:soundMgr.listenerPos.x, y:soundMgr.listenerPos.y});
+  sndDrawer.draw(sndObjs, lstObjs);
+}
+
 function tick(e) {
   fpsHist.log(1);
 
@@ -428,20 +463,16 @@ function tick(e) {
 
   gameWorld.step(e.time);
 
-  netbpsGraph.update();
-  netppsGraph.update();
-  fpsGraph.update();
-
   netUpdate();
   if (world.renderer()) {
     world.render();
-
-    localDrawer.draw(netRenderer.flush());
   }
   stage.update(e);
 
   var myPosition = myChar.getPosition();
   soundMgr.setPosition(myPosition.x, myPosition.y);
+
+  drawDebugs();
 
   adjustViewport();
 
@@ -508,6 +539,9 @@ function setup() {
   grpGame = new createjs.Container();
   stage.addChild(grpGame);
 
+  grpGame.scaleX = 0.5;
+  grpGame.scaleY = 0.5;
+
   lyrMapB = new createjs.Container();
   lyrItems = new createjs.Container();
   lyrChars = new createjs.Container();
@@ -562,48 +596,10 @@ function setup() {
   createjs.Ticker.setFPS(30);
 }
 
-var debugObjs = [];
-var debugVisObjs = [];
-
-function _drawDebugObj(g) {
-  g.clear();
-  g.beginStroke('rgba(255,0,0,0.6)');
-  g.beginFill('rgba(255,0,0,0.4)');
-  g.drawCircle(0, 0, 6);
-  g.moveTo(0, 0);
-}
-function _drawDebugShape(x, y) {
-  var shape = null;
-  if (debugObjs.length > 0) {
-    shape = debugObjs.pop();
-  } else {
-    shape = new createjs.Shape();
-    _drawDebugObj(shape.graphics);
-    lyrDebugX.addChild(shape);
-  }
-
-  shape.visible = true;
-  shape.x = x;
-  shape.y = y;
-  debugVisObjs.push(shape);
-}
-function _resetDebugShapes() {
-  for (var i = 0; i < debugVisObjs.length; ++i) {
-    var ii = debugVisObjs.length - 1 - i;
-    debugVisObjs[ii].visible = false;
-    debugObjs.push(debugVisObjs[ii]);
-  }
-  debugVisObjs = [];
-}
-function drawDebugShapes(objs) {
-  _resetDebugShapes();
-  for (var j = 0; j < objs.length; ++j) {
-    _drawDebugShape(objs[j].x, objs[j].y);
-  }
-}
-
 $(document).ready(function() {
   stage = new createjs.Stage("game");
+  viewportW = stage.canvas.width;
+  viewportH = stage.canvas.height;
 
   setup();
 
@@ -613,7 +609,7 @@ $(document).ready(function() {
     netDrawer.draw(args);
   });
   primus.non('world/debugDraw', function(args) {
-    drawDebugShapes(args);
+    objDrawer.draw(args);
   });
 
   primus.non('addtank', function(args) {

@@ -1,3 +1,6 @@
+if (typeof define !== 'function') { var define = require('amdefine')(module) }
+define(['./physics'], function(Physics) {
+
 function Projectile(world, opts, VisClass) {
   if (opts.state) {
     opts.x = opts.state.pos.x;
@@ -80,6 +83,5 @@ Projectile.prototype.getNetInfo = function() {
   return state;
 };
 
-if (typeof module !== 'undefined') {
-  module.exports = Projectile;
-}
+return Projectile;
+});

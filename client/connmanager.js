@@ -1,57 +1,83 @@
-var primus = null;
-function startConn() {
-  var onMap = {};
+define([
+  '../common/protocol.js'
+], function(
+  proto
+) {
 
-  primus = Primus.connect('/', {
-    parser: {
-      encoder: function(data, fn) { fn(undefined, data); },
-      decoder: function(data, fn) { fn(undefined, data); },
-      library: ''
+  function getRelativeUrl(path) {
+    var loc = window.location, new_uri;
+    if (loc.protocol === "https:") {
+      new_uri = "wss:";
+    } else {
+      new_uri = "ws:";
     }
-  });
+    new_uri += "//" + loc.host;
+    new_uri += loc.pathname + path;
+    return new_uri;
+  }
 
-  primus.nemit = function(cmd, args) {
-    var data = encodePacket(cmd, args);
+  function startConn(start) {
+    var onMap = {};
 
-    if (packetHist) {
-      packetHist.log(data.length);
-    }
+    var conn = new WebSocket(getRelativeUrl('/'));
+    conn.binaryType = 'arraybuffer';
 
-    this.write(data);
-  };
+    conn.onopen = function() {
+      start();
+    };
 
-  primus._nemit = function(cmd, args) {
-    var handlers = onMap[cmd];
-    if (handlers) {
-      for (var i = 0; i < handlers.length; ++i) {
-        handlers[i](args);
+    conn.onmessage = function (msg) {
+      //console.log(msg);
+      // TODO: Repair this
+      //if (packetHist) {
+      //  packetHist.log(data.length);
+      //}
+
+      var _data = proto.decodePacket(msg.data);
+      conn._nemit(_data[0], _data[1]);
+    };
+
+    conn.onerror = function (error) {
+      console.log('WebSocket Error' + error);
+    };
+
+    conn.onclose = function() {
+      console.log('WebSocket Closed');
+    };
+
+    conn.nemit = function(cmd, args) {
+      if (this.readyState !== WebSocket.OPEN) {
+        return;
       }
-    }
-  };
 
-  primus.non = function(cmd, handler) {
-    if (!onMap[cmd]) {
-      onMap[cmd] = [];
-    }
-    onMap[cmd].push(handler);
-  };
+      var data = proto.encodePacket(cmd, args);
 
-  primus.on('open', function open() {
-    log('connected');
-    start();
-  });
-  primus.on('data', function(data) {
-    if (packetHist) {
-      packetHist.log(data.length);
-    }
+      // TODO: Repair this too
+      //if (packetHist) {
+      //  packetHist.log(data.length);
+      //}
 
-    var _data = decodePacket(data);
-    primus._nemit(_data[0], _data[1]);
-  });
-  primus.on('error', function error(err) {
-    log('error : ', err);
-  });
-  primus.on('end', function error() {
-    log('disconnected');
-  });
-}
+      this.send(data);
+    };
+
+    conn._nemit = function(cmd, args) {
+      var handlers = onMap[cmd];
+      if (handlers) {
+        for (var i = 0; i < handlers.length; ++i) {
+          handlers[i](args);
+        }
+      }
+    };
+
+    conn.non = function(cmd, handler) {
+      if (!onMap[cmd]) {
+        onMap[cmd] = [];
+      }
+      onMap[cmd].push(handler);
+    };
+
+    return conn;
+  }
+
+  return startConn;
+});

@@ -1,12 +1,16 @@
 {
   "name": "battletanks",
   "description": "Battle Tanks Game",
-  "main": "./server",
+  "main": "./server/server",
   "dependencies": {
     "universes": "git+https://github.com/brett19/node-universes.git",
     "primus": "~1.5.0",
     "engine.io": "~0.7.12",
-    "binary-pack": "0.0.2"
+    "binary-pack": "0.0.2",
+    "requirejs": "~2.1.9",
+    "amdefine": "~0.1.0",
+    "ws": "~0.4.31",
+    "bops": "~0.1.1"
   },
   "devDependencies": {},
   "repository": {

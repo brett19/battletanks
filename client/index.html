@@ -1,139 +1,115 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <title>Test Client</title>
-        <meta http-equiv="X-UA-Compatible" content="IE=Edge">
-        <script src="/primus/primus.js"></script>
-        <script src="jquery-1.10.2.min.js"></script>
-        <script src="createjs-2013.12.12.min.js"></script>
-        <script src="common/physicsjs-full-0.5.3.min.js"></script>
-        <script src="common/bops.js"></script>
-        <script src="common/protocol.js"></script>
+<head>
+    <title>Test Client</title>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge">
+    <script data-main="js/main" src="js/require.js"></script>
+</head>
+<body>
+<style>
+    body {
+        margin: 0;
+        padding: 10px;
 
-        <script src="utils.js"></script>
-        <script src="bucketstats.js"></script>
-        <script src="bucketstatsgraph.js"></script>
+        font-family: Segoe UI, sans-serif;
+        font-size: 12px;
+    }
+    h3 {
+        margin: 0 0 10px 0;
+        padding: 0;
+    }
+    .container {
+        width: 1200px;
+        margin: 0 auto;
+    }
+    section#world {
 
-        <script src="common/physics_netrender.js"></script>
-        <script src="common/physics_collisions.js"></script>
-        <script src="common/physics_responder.js"></script>
-        <script src="common/physics_bodies.js"></script>
-        <script src="common/gameworld.js"></script>
+    }
 
-        <script src="connmanager.js"></script>
-        <script src="soundmanager.js"></script>
-        <script src="netrenderdrawer.js"></script>
-        <script src="common/tank.js"></script>
-        <script src="common/projectile.js"></script>
-        <script src="common/crate.js"></script>
-        <script src="common/dropplane.js"></script>
-        <script src="tanks.js"></script>
-    </head>
-    <body>
-        <style>
-            body {
-                margin: 0;
-                padding: 10px;
+    canvas#game {
+        background: #000000;
+    }
 
-                font-family: Segoe UI, sans-serif;
-                font-size: 12px;
-            }
-            h3 {
-                margin: 0 0 10px 0;
-                padding: 0;
-            }
-            .container {
-                width: 1200px;
-                margin: 0 auto;
-            }
-            section#world {
+    section#console {
+        height: 40px;
+        background: #333;
+        color: #fff;
+        padding: 5px;
 
-            }
+        overflow: auto;
+        font-size: 11px;
+        line-height: 14px;
+    }
 
-            canvas#game {
-                background: #000000;
-            }
+    ul#logs {
+        list-style-type: none;
+        margin: 0;
+        padding: 0;
+    }
 
-            section#console {
-                height: 40px;
-                background: #333;
-                color: #fff;
-                padding: 5px;
+    ul#logs li {
+        display: block;
+    }
 
-                overflow: auto;
-                font-size: 11px;
-                line-height: 14px;
-            }
+    footer {
+        margin-top: 8px;
+        text-align: center;
+        clear: both;
+    }
 
-            ul#logs {
-                list-style-type: none;
-                margin: 0;
-                padding: 0;
-            }
+    footer img {
+        margin: 2px 5px;
+    }
 
-            ul#logs li {
-                display: block;
-            }
+    #logo-universes {
+        position: relative;
+        top: -5px;
+    }
 
-            footer {
-                margin-top: 8px;
-                text-align: center;
-                clear: both;
-            }
+    #health, #ammo {
+        background-color: black;
+        border-radius: 13px; /* (height of inner div) / 2 + padding */
+        padding: 3px;
+    }
+    #health > div, #ammo > div {
+        width: 40%; /* Adjust with JavaScript */
+        height: 20px;
+        border-radius: 10px;
+        color: #ffffff;
+        font-weight: bold;
 
-            footer img {
-                margin: 2px 5px;
-            }
+    }
+    #health > div {
+        background-color: #88322f;
+    }
+    #ammo > div {
+        background-color: #1e4e88;
+    }
+</style>
 
-            #logo-universes {
-                position: relative;
-                top: -5px;
-            }
+<div class="container">
+    <section id="world">
+        <canvas width="1200" height="600" id="game"></canvas>
+    </section>
 
-            #health, #ammo {
-                background-color: black;
-                border-radius: 13px; /* (height of inner div) / 2 + padding */
-                padding: 3px;
-            }
-            #health > div, #ammo > div {
-                width: 40%; /* Adjust with JavaScript */
-                height: 20px;
-                border-radius: 10px;
-                color: #ffffff;
-                font-weight: bold;
+    <section id="info">
+        Health: <div id="health">
+        <div>100/100</div>
+    </div><br />
+        Ammo: <div id="ammo">
+        <div>50/50</div>
+    </div><br />
+    </section>
 
-            }
-            #health > div {
-                background-color: #88322f;
-            }
-            #ammo > div {
-                background-color: #1e4e88;
-            }
-        </style>
+    <section id="console">
+        <ul id="logs"></ul>
+    </section>
 
-        <div class="container">
-            <section id="world">
-                <canvas width="1200" height="600" id="game"></canvas>
-            </section>
-
-            <section id="info">
-                Health: <div id="health">
-                    <div>100/100</div>
-                </div><br />
-                Ammo: <div id="ammo">
-                    <div>50/50</div>
-                </div><br />
-            </section>
-
-            <section id="console">
-                <ul id="logs"></ul>
-            </section>
-
-            <footer>
-                <img src="imgs/logos/universes.png" id="logo-universes" width="100" />
-                <img src="imgs/logos/nodejs.png" id="logo-nodejs" width="100" />
-                <img src="imgs/logos/couchbase.png" id="logo-couchbase" width="100" />
-            </footer>
-        </div>
-    </body>
+    <footer>
+        <img src="imgs/logos/universes.png" id="logo-universes" width="100" />
+        <img src="imgs/logos/nodejs.png" id="logo-nodejs" width="100" />
+        <img src="imgs/logos/couchbase.png" id="logo-couchbase" width="100" />
+    </footer>
+</div>
+</body>
 </html>

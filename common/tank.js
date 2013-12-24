@@ -1,3 +1,6 @@
+if (typeof define !== 'function') { var define = require('amdefine')(module) }
+define(['./physics'], function(Physics) {
+
 var turnMag = 0.2;
 var speedMag = 0.2;
 var tspeedClamp = 180;33
@@ -257,6 +260,5 @@ Tank.prototype.getFireInfo = function() {
   };
 };
 
-if (typeof module !== 'undefined') {
-  module.exports = Tank;
-}
+return Tank;
+});

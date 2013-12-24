@@ -1,6 +1,6 @@
-if (typeof require === 'function') {
-  Physics = require('./physicsjs-full-0.5.3.min');
-}
+if (typeof define !== 'function') { var define = require('amdefine')(module) }
+
+define(['./physicsjs-full-0.5.3.min'], function(Physics) {
 
 Physics.body('crate', 'circle', function(parent) {
   return {
@@ -32,4 +32,6 @@ Physics.body('tankTurret', 'convex-polygon', function(parent) {
       parent.init.call(this, options);
     }
   };
+});
+
 });

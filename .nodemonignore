@@ -1,0 +1,4 @@
+# Ignore list for nodemon
+
+/.idea/*
+/client/*
