@@ -539,9 +539,6 @@ function setup() {
   grpGame = new createjs.Container();
   stage.addChild(grpGame);
 
-  grpGame.scaleX = 0.5;
-  grpGame.scaleY = 0.5;
-
   lyrMapB = new createjs.Container();
   lyrItems = new createjs.Container();
   lyrChars = new createjs.Container();

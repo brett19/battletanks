@@ -1,4 +1,4 @@
-var core = require('universes').Core;
+var core = require('universes')().Core;
 var util = require('util');
 var events = require('events');
 var WebSocketServer = require('ws').Server;
