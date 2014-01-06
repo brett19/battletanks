@@ -1,12 +1,12 @@
 define([
   '../../common/physics',
   '../../common/gameworld',
-  '../bucketstats',
-  '../connmanager',
-  '../netrenderdrawer',
-  '../debugdrawer',
-  '../bucketstatsgraph',
-  '../soundmanager',
+  'bucketstats',
+  'connmanager',
+  'netrenderdrawer',
+  'debugdrawer',
+  'bucketstatsgraph',
+  'soundmanager',
   'jquery',
   'createjs'
 ], function(
@@ -37,14 +37,14 @@ define([
   var maxHealth = 100;
   var maxAmmo = 30;
 
-  createjs.Sound.registerSound("tank-firing.mp3", "tankFiring");
-  createjs.Sound.registerSound("explosion.mp3", "explosion");
-  createjs.Sound.registerSound("plane_engine.mp3", "planeengine");
+  createjs.Sound.registerSound("snds/tank-firing.mp3", "tankFiring");
+  createjs.Sound.registerSound("snds/explosion.mp3", "explosion");
+  createjs.Sound.registerSound("snds/plane_engine.mp3", "planeengine");
 
   createjs.Sound.setVolume(0.10);
 
   var data = {
-    images: ["explosion_strip10.png"],
+    images: ["imgs/explosion_strip10.png"],
     framerate: 27,
     frames: {width:58, height:56},
     animations: {
@@ -54,7 +54,7 @@ define([
   var spriteSheet = new createjs.SpriteSheet(data);
 
   var dataCP = {
-    images: ["cratePop.png"],
+    images: ["imgs/cratePop.png"],
     framerate: 18,
     frames: {width:230, height:203},
     animations: {
@@ -64,7 +64,7 @@ define([
   var cratePopSheet = new createjs.SpriteSheet(dataCP);
 
   var dataChute = {
-    images: ["chute.png"],
+    images: ["imgs/chute.png"],
     framerate: 10,
     frames: {width:52, height:56},
     animations: {
@@ -80,12 +80,12 @@ define([
     this.holder = new createjs.Container();
     lyrChars.addChild(this.holder);
 
-    this.shell = new createjs.Bitmap('tank2b.png');
+    this.shell = new createjs.Bitmap('imgs/tank2b.png');
     this.shell.regX = 24;
     this.shell.regY = 20;
     this.holder.addChild(this.shell);
 
-    this.turret = new createjs.Bitmap('tank2c.png');
+    this.turret = new createjs.Bitmap('imgs/tank2c.png');
     this.turret.regX = 9;
     this.turret.regY = 7;
     this.turret.x = 11;
@@ -140,7 +140,7 @@ define([
   function ProjectileVis(obj, opts) {
     this.obj = obj;
 
-    this.img = new createjs.Bitmap('attack.png');
+    this.img = new createjs.Bitmap('imgs/attack.png');
     this.img.regX = 8;
     this.img.regY = 2;
     lyrProjs.addChild(this.img);
@@ -164,7 +164,7 @@ define([
 
     var objPos = this.obj.getPosition();
 
-    this.img = new createjs.Bitmap('crate.png');
+    this.img = new createjs.Bitmap('imgs/crate.png');
     this.img.regX = 17;
     this.img.regY = 16;
     this.img.x = objPos.x;
@@ -205,7 +205,7 @@ define([
   function DropPlaneVis(obj, opts) {
     this.obj = obj;
 
-    this.img = new createjs.Bitmap('enemy_plane_4.png');
+    this.img = new createjs.Bitmap('imgs/enemy_plane_4.png');
     this.img.regX = 97;
     this.img.regY = 71;
     lyrPlanes.addChild(this.img);
@@ -542,8 +542,8 @@ define([
     grpGame = new createjs.Container();
     stage.addChild(grpGame);
 
-    grpGame.scaleX = 0.5;
-    grpGame.scaleY = 0.5;
+    grpGame.scaleX = 1;
+    grpGame.scaleY = 1;
 
     lyrMapB = new createjs.Container();
     lyrItems = new createjs.Container();
@@ -600,10 +600,10 @@ define([
       radius: 4
     });
 
-    var mapT = new createjs.Bitmap('mapTop.png');
+    var mapT = new createjs.Bitmap('imgs/mapTop.png');
     lyrMapT.addChild(mapT);
 
-    var mapB = new createjs.Bitmap('mapBottom.png');
+    var mapB = new createjs.Bitmap('imgs/mapBottom.png');
     lyrMapB.addChild(mapB);
 
     setupWorld();

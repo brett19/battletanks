@@ -1,5 +1,5 @@
 define([
-  '../common/protocol.js'
+  '../../common/protocol.js'
 ], function(
   proto
 ) {
